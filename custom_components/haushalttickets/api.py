@@ -100,6 +100,66 @@ class HaushaltticketsClient:
         except (aiohttp.ClientError, TimeoutError) as err:
             raise CannotConnect(str(err) or type(err).__name__) from err
 
+    async def download(
+        self, acting: Acting, path: str
+    ) -> tuple[bytes, str, str | None]:
+        """A file: content, content type and Content-Disposition."""
+        try:
+            async with self._session.get(
+                f"{self._base}{path}",
+                headers=self._headers(acting),
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 3),
+            ) as response:
+                if response.status == 401:
+                    raise InvalidAuth
+                body = await response.read()
+                if response.status >= 400:
+                    raise _api_error(response.status, _json_or_none(body))
+                return (
+                    body,
+                    response.headers.get("Content-Type", "application/octet-stream"),
+                    response.headers.get("Content-Disposition"),
+                )
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise CannotConnect(str(err) or type(err).__name__) from err
+
+    async def upload(
+        self,
+        acting: Acting,
+        ticket_id: int,
+        *,
+        filename: str,
+        content_type: str,
+        data: bytes,
+        kind: str,
+    ) -> dict[str, Any]:
+        """Attach a file to a ticket."""
+        form = aiohttp.FormData()
+        form.add_field("kind", kind)
+        form.add_field("file", data, filename=filename, content_type=content_type)
+        try:
+            async with self._session.post(
+                f"{self._base}/api/v1/tickets/{ticket_id}/attachments",
+                headers=self._headers(acting),
+                data=form,
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT * 6),
+            ) as response:
+                if response.status == 401:
+                    raise InvalidAuth
+                body = _json_or_none(await response.read())
+                if response.status >= 400:
+                    raise _api_error(response.status, body)
+                return body
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise CannotConnect(str(err) or type(err).__name__) from err
+
+    def _headers(self, acting: Acting | None) -> dict[str, str]:
+        headers = {"Authorization": f"Bearer {self._token}"}
+        if acting is not None:
+            headers["X-Acting-User"] = acting.user_id
+            headers["X-Acting-Via"] = acting.via
+        return headers
+
     async def health(self) -> dict[str, Any]:
         """Health check; needs no token."""
         body = await self.request("GET", "/api/health", auth=False)
@@ -206,6 +266,13 @@ def _query(params: dict[str, Any] | None) -> list[tuple[str, str]] | None:
                 )
             )
     return pairs
+
+
+def _json_or_none(raw: bytes) -> Any:
+    try:
+        return json_loads(raw) if raw else None
+    except ValueError:
+        return None
 
 
 def _api_error(status: int, body: Any) -> ApiError:

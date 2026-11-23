@@ -182,6 +182,10 @@ class TicketOut(_Out):
     created_at: datetime
     updated_at: datetime
     closed_at: datetime | None
+    # Shown on the ticket tile.
+    comment_count: int = 0
+    attachment_count: int = 0
+    cover_attachment_id: str | None = None
 
 
 class TicketList(BaseModel):

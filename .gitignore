@@ -11,3 +11,4 @@ htmlcov/
 .env
 *.local.*
 secrets.yaml
+tests/card/node_modules/

@@ -98,6 +98,19 @@ jobs:
         run: uv venv .venv-ha --python 3.14 && uv pip install --python .venv-ha -r requirements_test.txt
       - run: .venv-ha/bin/python -m pytest -q
 
+  card:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check custom_components/haushalttickets/frontend/haushalttickets-card.js
+      - name: Smoke test in jsdom
+        run: |
+          npm install --no-save --prefix tests/card jsdom@24
+          node tests/card/smoke.mjs custom_components/haushalttickets/frontend/haushalttickets-card.js
+
   hassfest:
     runs-on: ubuntu-latest
     steps:

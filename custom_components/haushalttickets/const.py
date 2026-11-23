@@ -12,6 +12,9 @@ EVENT_TICKET: Final = "haushalttickets_event"
 LLM_API_ID: Final = "haushalttickets"
 LLM_API_NAME: Final = "Haushalttickets"
 
+# The Kanban card, served by the integration and loaded on every dashboard.
+CARD_URL: Final = "/haushalttickets_static/haushalttickets-card.js"
+
 # The server user Home Assistant automations and scripts act as.
 AUTOMATION_USER_ID: Final = "automation"
 

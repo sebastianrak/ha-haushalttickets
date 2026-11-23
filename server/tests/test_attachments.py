@@ -69,3 +69,51 @@ def test_ticket_delete_removes_files(api: Api, app) -> None:
     path = Path(app.state.settings.attachments_dir) / "1" / attachment["id"]
     assert api("alex").delete("/api/v1/tickets/1").status_code == 204
     assert not path.exists()
+
+
+def _jpeg(width: int = 1200, height: int = 800) -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", (width, height), (200, 80, 40)).save(buffer, "JPEG")
+    return buffer.getvalue()
+
+
+def test_thumbnail_and_tile_counts(api: Api, app) -> None:
+    app.state.settings.max_attachment_bytes = 5 * 1024 * 1024
+    ticket = create(api, "robin")
+    assert ticket["attachment_count"] == 0
+    assert ticket["cover_attachment_id"] is None
+    upload(
+        api, "robin", data=b"%PDF-1.4", kind="document", content_type="application/pdf"
+    )
+    photo = upload(api, "robin", data=_jpeg(), content_type="image/jpeg").json()
+    api("robin").post(f"/api/v1/tickets/{ticket['id']}/comments", json={"body": "Foto"})
+
+    listed = api("alex").get("/api/v1/tickets").json()["tickets"][0]
+    assert listed["attachment_count"] == 2
+    assert listed["comment_count"] == 1
+    assert listed["cover_attachment_id"] == photo["id"]
+
+    response = api("alex").get(f"/api/v1/attachments/{photo['id']}/thumbnail")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    from io import BytesIO
+
+    from PIL import Image
+
+    assert max(Image.open(BytesIO(response.content)).size) == 480
+
+
+def test_no_thumbnail_for_documents_and_broken_images(api: Api, app) -> None:
+    create(api, "robin")
+    pdf = upload(
+        api, "robin", data=b"%PDF-1.4", kind="document", content_type="application/pdf"
+    ).json()
+    broken = upload(api, "robin", data=b"not a jpeg", content_type="image/jpeg").json()
+    for attachment in (pdf, broken):
+        response = api("alex").get(f"/api/v1/attachments/{attachment['id']}/thumbnail")
+        assert response.status_code == 404
+        assert error_code(response) == "no_thumbnail"
