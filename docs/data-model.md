@@ -91,6 +91,11 @@ Invoices are attachments of kind `invoice`.
 
 ## Rules
 
+- Changes arriving via MCP or the nightly run follow the AI rules, whoever logged in
+  the MCP client. Users with role `ai_agent` follow them on every channel.
+- New users synced from Home Assistant start as `admin` if they are Home Assistant
+  administrators, otherwise as `child` (least privilege, *proposal*); an admin assigns
+  the right role.
 - Statuses can move freely between `new` … `acceptance` for humans with the right role.
 - `done`: only the requester (acceptance). *Proposal:* an admin may close in exceptional
   cases; this is recorded in the history.

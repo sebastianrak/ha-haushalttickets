@@ -19,6 +19,23 @@ jobs:
 
   server:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: hht
+          POSTGRES_PASSWORD: hht
+          POSTGRES_DB: hht_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hht"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      HAUSHALTTICKETS_TEST_DATABASE_URL: postgresql+psycopg://hht:hht@127.0.0.1:5432/hht_test
+      HAUSHALTTICKETS_TEST_REQUIRE_DB: "1"
     defaults:
       run:
         working-directory: server

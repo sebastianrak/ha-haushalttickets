@@ -3,12 +3,65 @@
 FastAPI service holding tickets, attachments and history. Runs in an unprivileged
 Debian LXC next to PostgreSQL.
 
-Current state: skeleton with a health endpoint.
+## Commands
 
 ```bash
-uv run --extra test pytest           # tests
-uv run haushalttickets-server         # dev server on 127.0.0.1:8080
+haushalttickets-server migrate               # apply database migrations
+haushalttickets-server token create NAME     # create an API token (printed once)
+haushalttickets-server token revoke NAME
+haushalttickets-server                       # run the API (same as "serve")
 ```
 
-Settings are read from environment variables with the prefix `HAUSHALTTICKETS_`
-(see `src/haushalttickets_server/config.py`).
+Settings come from environment variables with the prefix `HAUSHALTTICKETS_`:
+
+| Variable | Default |
+|---|---|
+| `HAUSHALTTICKETS_DATABASE_URL` | `postgresql+psycopg:///haushalttickets` (local socket, peer auth) |
+| `HAUSHALTTICKETS_HOST` / `_PORT` | `127.0.0.1` / `8080` |
+| `HAUSHALTTICKETS_ATTACHMENTS_DIR` | `/var/lib/haushalttickets/attachments` |
+| `HAUSHALTTICKETS_MAX_ATTACHMENT_BYTES` | 20 MiB |
+
+## API
+
+All endpoints except `/api/health` need `Authorization: Bearer <token>`.
+
+The Home Assistant integration names the acting household member:
+
+| Header | Meaning |
+|---|---|
+| `X-Acting-User` | Home Assistant user id. Without it the request acts as the integration itself (read and user sync only). |
+| `X-Acting-Via` | `ui` (default), `mcp`, `nightly_run`, `recurrence`, `emergency_ui`. `mcp` and `nightly_run` always follow the AI rules. |
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | Liveness |
+| GET | `/api/v1/users` | Users |
+| POST | `/api/v1/users/sync` | Create/update users from Home Assistant (new non-admins start as `child`) |
+| PATCH | `/api/v1/users/{id}` | Change role (admins) |
+| GET, PATCH | `/api/v1/settings` | Approval threshold (change: admins) |
+| GET, POST | `/api/v1/tickets` | List (filters: `status`, `type`, `assignee`, `requested_by`, `q`, `include_closed`), create |
+| GET, PATCH, DELETE | `/api/v1/tickets/{id}` | Read, edit fields, delete (admins) |
+| POST | `/api/v1/tickets/{id}/status` | Move to another column |
+| PUT | `/api/v1/tickets/{id}/assignees` | Replace assignees |
+| POST | `/api/v1/tickets/{id}/approval` | Approve/decline a purchase |
+| POST | `/api/v1/tickets/{id}/ai-flags` | "AI should draft" / "AI should implement" |
+| GET, POST | `/api/v1/tickets/{id}/comments` | Comments |
+| POST, PATCH, DELETE | `/api/v1/tickets/{id}/checklist[/{item}]` | Checklist |
+| GET | `/api/v1/tickets/{id}/history` | Recorded changes |
+| GET, POST | `/api/v1/tickets/{id}/attachments` | Files (multipart `file`, `kind`) |
+| GET, DELETE | `/api/v1/attachments/{id}` | Download, remove |
+| GET | `/api/v1/events?after=SEQ` | Event feed for notifications and refresh |
+
+Errors return `{"detail": {"code": "...", "detail": "..."}}` with stable codes such as
+`acceptance_by_requester`, `approval_pending` or `ai_status_forbidden`.
+
+Interactive documentation: `/docs` on the running server.
+
+## Tests
+
+The tests need PostgreSQL; the configured database is wiped.
+
+```bash
+export HAUSHALTTICKETS_TEST_DATABASE_URL=postgresql+psycopg://user:pass@127.0.0.1/hht_test
+uv run --extra test pytest
+```
