@@ -325,6 +325,9 @@ CREATE_ARGS=(
 )
 [[ -n $NAMESERVER ]] && CREATE_ARGS+=(--nameserver "$NAMESERVER")
 
+# The host's LANG (e.g. en_US.UTF-8) does not exist in the template; C.UTF-8 always does.
+ct_exec() { pct exec "$CTID" -- env LANG=C.UTF-8 LC_ALL=C.UTF-8 "$@"; }
+
 CREATED_CT=""
 cleanup_hint() {
   local status=$?
@@ -344,7 +347,7 @@ pct start "$CTID"
 step "$(L "Warte auf Netzwerk" "Waiting for network")"
 online=0
 for _ in $(seq 1 60); do
-  if pct exec "$CTID" -- getent hosts github.com >/dev/null 2>&1; then
+  if ct_exec getent hosts github.com >/dev/null 2>&1; then
     online=1
     break
   fi
@@ -354,15 +357,15 @@ done
                                "Container $CTID has no network (check bridge, VLAN, IP).")"
 
 step "$(L "Haushalttickets holen" "Fetching Haushalttickets") ($REF)"
-pct exec "$CTID" -- bash -c \
+ct_exec bash -c \
   "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null"
-pct exec "$CTID" -- git clone --quiet --depth 1 --branch "$REF" "$REPO_URL" /opt/haushalttickets/src
+ct_exec git clone --quiet --depth 1 --branch "$REF" "$REPO_URL" /opt/haushalttickets/src
 
 INSTALL_ARGS=(--backup-time "$BACKUP_TIME")
 [[ -n $ALLOWED_CLIENTS ]] && INSTALL_ARGS+=(--allowed-clients "$ALLOWED_CLIENTS")
 
 step "$(L "Installation im Container" "Installing inside the container")"
-pct exec "$CTID" -- bash /opt/haushalttickets/src/deploy/lxc/install.sh "${INSTALL_ARGS[@]}"
+ct_exec bash /opt/haushalttickets/src/deploy/lxc/install.sh "${INSTALL_ARGS[@]}"
 
 # Backup job
 
@@ -384,7 +387,7 @@ elif [[ $JOB_VMIDS != "-" ]]; then
   fi
 fi
 
-ADDRESS=$(pct exec "$CTID" -- hostname -I | awk '{print $1}')
+ADDRESS=$(ct_exec hostname -I | awk '{print $1}')
 cat <<EOF
 
 $(L "Fertig. Container $CTID ($CT_HOSTNAME) läuft." "Done. Container $CTID ($CT_HOSTNAME) is running.")
