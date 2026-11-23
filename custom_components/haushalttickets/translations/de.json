@@ -92,6 +92,12 @@
     },
     "reserved_fields": {
       "message": "Diese Felder über die eigenen Optionen setzen, nicht über extra_fields: {fields}"
+    },
+    "user_not_found": {
+      "message": "Kein Home-Assistant-Benutzer heißt {user}."
+    },
+    "user_ambiguous": {
+      "message": "Mehrere Home-Assistant-Benutzer heißen {user}; gib die Benutzer-ID an."
     }
   },
   "selector": {
@@ -216,11 +222,15 @@
     },
     "set_role": {
       "name": "Rolle setzen",
-      "description": "Setzt die Rolle eines Haushaltsmitglieds im Ticketsystem. Nur für Home-Assistant-Admins; der Server verlangt zusätzlich seine Admin-Rolle.",
+      "description": "Setzt die Rolle eines Haushaltsmitglieds im Ticketsystem: eine Person angeben oder einen Benutzer ohne Person (etwa das KI-Konto) per Name. Nur für Home-Assistant-Admins; der Server verlangt zusätzlich seine Admin-Rolle.",
       "fields": {
         "person": {
           "name": "Person",
-          "description": "Mit dem Benutzer verknüpfte Person."
+          "description": "Mit dem Benutzer verknüpfte Person. Leer lassen, wenn ein Benutzer angegeben ist."
+        },
+        "user": {
+          "name": "Benutzer",
+          "description": "Name oder ID eines Home-Assistant-Benutzers ohne Person, zum Beispiel des KI-Kontos."
         },
         "role": {
           "name": "Rolle",

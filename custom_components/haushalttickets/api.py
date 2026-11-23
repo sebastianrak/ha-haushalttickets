@@ -188,15 +188,24 @@ class HaushaltticketsClient:
         )
 
 
-def _query(params: dict[str, Any] | None) -> dict[str, str] | None:
-    """aiohttp only accepts str, int and float query values."""
+def _query(params: dict[str, Any] | None) -> list[tuple[str, str]] | None:
+    """Query pairs; lists repeat the key (``status=new&status=acceptance``)."""
     if params is None:
         return None
-    return {
-        key: ("true" if value else "false") if isinstance(value, bool) else str(value)
-        for key, value in params.items()
-        if value is not None
-    }
+    pairs = []
+    for key, value in params.items():
+        for item in value if isinstance(value, (list, tuple)) else [value]:
+            if item is None:
+                continue
+            pairs.append(
+                (
+                    key,
+                    ("true" if item else "false")
+                    if isinstance(item, bool)
+                    else str(item),
+                )
+            )
+    return pairs
 
 
 def _api_error(status: int, body: Any) -> ApiError:

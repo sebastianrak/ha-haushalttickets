@@ -1,4 +1,11 @@
 # Test harness for the integration. It pins its Home Assistant version
 # (2026.10.4 at the time of writing). The tests start the real server from a
-# separate environment, see tests/conftest.py.
+# separate environment, see tests/conftest.py. The other pins match that Home
+# Assistant version's mcp_server and conversation requirements.
 pytest-homeassistant-custom-component==0.13.375
+mcp==1.28.1
+aiohttp_sse==2.2.0
+anyio==4.14.2
+hassil==3.12.1
+home-assistant-intents==2026.10.6
+gazetteer-matcher==1.1.0

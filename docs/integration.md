@@ -22,7 +22,8 @@ whenever users or person links change. Removed users become inactive.
 
 - New Home Assistant admins start as ticket **admin**, everyone else as **child**
   (least privilege). Set the right role with the action `haushalttickets.set_role`
-  (Home Assistant admins only).
+  (Home Assistant admins only); it takes a person or, for accounts without a
+  person, the user's name or ID.
 - A dedicated AI account (KI-Hausmeister) that is a Home Assistant admin starts as
   ticket admin. Set it to `ai_agent` immediately.
 - Automations and scripts that run without a user act as the server user
@@ -93,10 +94,53 @@ actions:
 | `haushalttickets.set_status` | Move a ticket; returns the ticket. |
 | `haushalttickets.add_comment` | Comment on a ticket. |
 | `haushalttickets.assign` | Replace the assignees (persons linked to users). |
-| `haushalttickets.set_role` | Role of a person in the ticket system (HA admins only). |
+| `haushalttickets.set_role` | Role of a person, or of a user without person given by name or ID (HA admins only). |
 
 The server rules apply unchanged; a refused call raises an error with the server's
 error code.
+
+## AI assistants (MCP)
+
+The integration registers the LLM API **Haushalttickets** (id `haushalttickets`).
+Home Assistant's MCP server integration serves it at `/api/mcp/haushalttickets`;
+this endpoint accepts Home Assistant **admins only** (decision D7). If an MCP server
+entry exposes "all LLM APIs, also those added later", the tools appear at `/api/mcp`
+as well, with that entry's own admin setting.
+
+| Tool | Does |
+|---|---|
+| `haushalttickets_household` | Calling person and role, members, allowed values, approval threshold |
+| `haushalttickets_list_tickets` | Open tickets by default; filters: status, type, mine, text, closed |
+| `haushalttickets_get_ticket` | All fields, checklist, comments, recent changes |
+| `haushalttickets_create_ticket` | New ticket requested by the calling person |
+| `haushalttickets_add_comment` | Comment, marked as written through the AI |
+| `haushalttickets_set_status` | Status up to `acceptance`, optional reason as comment |
+
+Every call acts for the logged-in Home Assistant user through the channel `mcp`,
+so the server applies the AI rules even for admins: no done, no rejecting, no
+deleting, no assigning, no approvals, no field edits after creation. Calls without
+a user (voice satellites, automations) are refused. Ticket texts are handed to the
+model as data; the API prompt tells it not to follow instructions inside them.
+
+### Connecting claude.ai
+
+1. claude.ai → Settings → Connectors → add a custom connector with
+   `https://<your Nabu Casa URL>/api/mcp/haushalttickets`.
+2. Sign in with a Home Assistant admin account. The tools act as that account.
+
+### AI account
+
+For the nightly run, create a Home Assistant user "KI-Hausmeister" (admin, no
+person) and set its ticket role right away:
+
+```yaml
+action: haushalttickets.set_role
+data:
+  user: KI-Hausmeister
+  role: ai_agent
+```
+
+Until then it is a ticket admin, because Home Assistant admins start as admins.
 
 ## WebSocket API (for the card)
 

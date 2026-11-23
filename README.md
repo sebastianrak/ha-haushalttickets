@@ -3,9 +3,9 @@
 A ticket system for a household – repairs, purchases and work on Home Assistant itself –
 with a Home Assistant integration and AI access over MCP.
 
-> **Status: pre-alpha.** Server and the core of the integration (sensors, actions,
-> events) work; the Kanban card, MCP tools, notifications, recurring tickets, the
-> emergency UI and the nightly run are still to come.
+> **Status: pre-alpha.** Server, the core of the integration (sensors, actions,
+> events) and the MCP tools for AI assistants work; the Kanban card, notifications,
+> recurring tickets, the emergency UI and the nightly run are still to come.
 
 ## Idea
 
@@ -34,7 +34,7 @@ claude.ai ──Nabu Casa──▶ Home Assistant ── mcp_server (/api/mcp/ha
 | Part | Path | Purpose |
 |---|---|---|
 | Server | `server/` | FastAPI + PostgreSQL in a Debian LXC; source of truth for tickets, attachments, history |
-| Integration | `custom_components/haushalttickets/` | Sensors, events, actions, WebSocket API; later LLM API for MCP and the Kanban card, see [docs/integration.md](docs/integration.md) |
+| Integration | `custom_components/haushalttickets/` | Sensors, events, actions, WebSocket API, LLM API for MCP; later the Kanban card, see [docs/integration.md](docs/integration.md) |
 | Spike | `spike/` | Throwaway proof that integration-provided tools reach MCP clients via `mcp_server` |
 | Docs | `docs/` | Architecture and decisions |
 

@@ -103,10 +103,13 @@ assign:
 set_role:
   fields:
     person:
-      required: true
       selector:
         entity:
           domain: person
+    user:
+      example: "KI-Hausmeister"
+      selector:
+        text:
     role:
       required: true
       selector:
