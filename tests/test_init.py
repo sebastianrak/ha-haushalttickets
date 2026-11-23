@@ -108,6 +108,29 @@ async def test_sensors_and_events(
     assert data["ticket"]["assignee_persons"] == ["person.robin"]
 
 
+async def test_person_sensors_only_for_linked_users(
+    hass: HomeAssistant, loaded: MockConfigEntry
+) -> None:
+    """Accounts without a person (wall tablet, service) get no sensors until linked."""
+    tablet = await hass.auth.async_create_user(
+        "Tablet Flur", group_ids=["system-users"]
+    )
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=3))
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    unique_id = f"{loaded.entry_id}_{tablet.id}_assigned"
+    assert tablet.id in _coordinator(loaded).data.users
+    assert not registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+
+    hass.states.async_set("person.flur", "home", {"user_id": tablet.id})
+    # Sync after 2 s; the refresh waits for the coordinator's 10 s cooldown and runs
+    # as a background task.
+    for seconds in (6, 20):
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=seconds))
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+
+
 async def test_automation_acts_as_automation(
     hass: HomeAssistant, loaded: MockConfigEntry
 ) -> None:

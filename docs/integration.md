@@ -43,8 +43,9 @@ One service device *Haushalttickets* with:
 | *Person* to accept | tickets the person requested that wait for acceptance |
 
 The attribute `tickets` lists up to 25 matching tickets (most urgent first). It is
-not recorded in the history database. Per-person sensors appear automatically for new
-users.
+not recorded in the history database. Per-person sensors exist for users linked to a
+person entity and appear automatically when a user is linked; accounts without a
+person (wall tablets, service accounts) are synced but get no sensors.
 
 ## Event `haushalttickets_event`
 

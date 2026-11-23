@@ -93,7 +93,11 @@ async def async_setup_entry(
         new = [
             user_id
             for user_id, user in coordinator.data.users.items()
-            if user_id not in known and user_id != AUTOMATION_USER_ID and user["active"]
+            if user_id not in known
+            and user_id != AUTOMATION_USER_ID
+            and user["active"]
+            # Only household members: service and tablet accounts have no person.
+            and user["ha_person_entity_id"]
         ]
         known.update(new)
         async_add_entities(
