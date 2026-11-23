@@ -3,6 +3,11 @@
 # the repository (deploy/proxmox/create-lxc.sh does that for you). Safe to re-run.
 set -euo pipefail
 
+# A locale that exists in every Debian container. Without it PostgreSQL falls back
+# to "C" and creates databases with SQL_ASCII encoding.
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+unset LANGUAGE
+
 SRC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 APP_USER="haushalttickets"
 DATA_DIR="/var/lib/haushalttickets"
@@ -62,9 +67,24 @@ fi
 if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_roles WHERE rolname = '$APP_USER'" | grep -q 1; then
   runuser -u postgres -- createuser "$APP_USER"
 fi
-if ! runuser -u postgres -- psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$APP_USER'" | grep -q 1; then
-  runuser -u postgres -- createdb --owner "$APP_USER" "$APP_USER"
+pg() { runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -tA "$@"; }
+ENCODING=$(pg -c "SELECT pg_encoding_to_char(encoding) FROM pg_database WHERE datname = '$APP_USER'")
+if [[ -n $ENCODING && $ENCODING != UTF8 ]]; then
+  TABLES=$(pg -d "$APP_USER" -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+  if [[ $TABLES -eq 0 ]]; then
+    echo "Database $APP_USER uses $ENCODING and is empty, recreating it with UTF8."
+    runuser -u postgres -- dropdb "$APP_USER"
+    ENCODING=""
+  else
+    die "database $APP_USER uses $ENCODING and contains tables; convert it to UTF8 first (dump, recreate, restore)"
+  fi
 fi
+if [[ -z $ENCODING ]]; then
+  runuser -u postgres -- createdb --owner "$APP_USER" --encoding UTF8 --locale C.UTF-8 \
+    --template template0 "$APP_USER"
+fi
+[[ $(pg -c "SELECT pg_encoding_to_char(encoding) FROM pg_database WHERE datname = '$APP_USER'") == UTF8 ]] ||
+  die "database $APP_USER is not UTF8"
 
 echo "==> Configuration"
 if [[ ! -f $ENV_FILE ]]; then
