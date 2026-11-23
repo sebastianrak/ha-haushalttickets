@@ -13,6 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 from .api import ApiError, CannotConnect, HaushaltticketsClient, InvalidAuth
 from .const import DOMAIN
 from .coordinator import HaushaltticketsConfigEntry, HaushaltticketsCoordinator
+from .llm_api import async_register_llm_api
 from .services import async_setup_services
 from .websocket import async_setup_websocket
 
@@ -53,6 +54,8 @@ async def async_setup_entry(
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     coordinator.async_setup_user_listeners()
+    # Ticket tools for AI assistants (mcp_server serves them to claude.ai).
+    entry.async_on_unload(async_register_llm_api(hass, coordinator))
 
     @callback
     def _sync_after_start(_hass: HomeAssistant) -> None:

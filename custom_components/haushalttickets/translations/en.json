@@ -92,6 +92,12 @@
     },
     "reserved_fields": {
       "message": "Set these through their own options, not extra_fields: {fields}"
+    },
+    "user_not_found": {
+      "message": "No Home Assistant user is named {user}."
+    },
+    "user_ambiguous": {
+      "message": "Several Home Assistant users are named {user}; give the user ID."
     }
   },
   "selector": {
@@ -216,11 +222,15 @@
     },
     "set_role": {
       "name": "Set role",
-      "description": "Sets the role of a household member in the ticket system. Home Assistant admins only; the server also requires its admin role.",
+      "description": "Sets the role of a household member in the ticket system: give a person, or a user without person (such as the AI account) by name. Home Assistant admins only; the server also requires its admin role.",
       "fields": {
         "person": {
           "name": "Person",
-          "description": "Person linked to the user."
+          "description": "Person linked to the user. Leave empty when you give a user."
+        },
+        "user": {
+          "name": "User",
+          "description": "Name or ID of a Home Assistant user without person, for example the AI account."
         },
         "role": {
           "name": "Role",

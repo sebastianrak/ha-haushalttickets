@@ -8,6 +8,10 @@ DOMAIN: Final = "haushalttickets"
 # Fired on the event bus for every change on the server.
 EVENT_TICKET: Final = "haushalttickets_event"
 
+# LLM API with the ticket tools; mcp_server serves it at /api/mcp/haushalttickets.
+LLM_API_ID: Final = "haushalttickets"
+LLM_API_NAME: Final = "Haushalttickets"
+
 # The server user Home Assistant automations and scripts act as.
 AUTOMATION_USER_ID: Final = "automation"
 
@@ -49,4 +53,5 @@ ATTR_TICKET_ID: Final = "ticket_id"
 ATTR_STATUS: Final = "status"
 ATTR_COMMENT: Final = "comment"
 ATTR_PERSON: Final = "person"
+ATTR_USER: Final = "user"
 ATTR_ROLE: Final = "role"

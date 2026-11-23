@@ -35,6 +35,7 @@ from .const import (
     ATTR_TITLE,
     ATTR_TYPE,
     ATTR_URGENCY,
+    ATTR_USER,
     DOMAIN,
     ROLES,
     SERVICE_ADD_COMMENT,
@@ -85,11 +86,16 @@ ASSIGN_SCHEMA = probatio.Schema(
         probatio.Required(ATTR_ASSIGNEES): cv.entity_ids,
     }
 )
-SET_ROLE_SCHEMA = probatio.Schema(
-    {
-        probatio.Required(ATTR_PERSON): cv.entity_domain("person"),
-        probatio.Required(ATTR_ROLE): probatio.In(ROLES),
-    }
+SET_ROLE_SCHEMA = probatio.All(
+    probatio.Schema(
+        {
+            # A person, or a user without person such as the AI account.
+            probatio.Exclusive(ATTR_PERSON, "target"): cv.entity_domain("person"),
+            probatio.Exclusive(ATTR_USER, "target"): cv.string,
+            probatio.Required(ATTR_ROLE): probatio.In(ROLES),
+        }
+    ),
+    cv.has_at_least_one_key(ATTR_PERSON, ATTR_USER),
 )
 
 # Fields set through dedicated options; extra_fields must not override them.
@@ -257,11 +263,32 @@ async def _assign(call: ServiceCall) -> ServiceResponse:
     return ticket_summary(ticket, coordinator.data)
 
 
+async def user_id_for_name(hass: HomeAssistant, name_or_id: str) -> str:
+    """The Home Assistant user with this id or (case-insensitive) name."""
+    wanted = name_or_id.strip().casefold()
+    users = [
+        user
+        for user in await hass.auth.async_get_users()
+        if not user.system_generated
+        and (user.id == name_or_id.strip() or (user.name or "").casefold() == wanted)
+    ]
+    if len(users) != 1:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="user_not_found" if not users else "user_ambiguous",
+            translation_placeholders={"user": name_or_id},
+        )
+    return users[0].id
+
+
 async def _set_role(call: ServiceCall) -> None:
     hass = call.hass
     coordinator = get_coordinator(hass)
     acting = await acting_for(hass, call.context)
-    (user_id,) = user_ids_for_persons(hass, [call.data[ATTR_PERSON]])
+    if ATTR_PERSON in call.data:
+        (user_id,) = user_ids_for_persons(hass, [call.data[ATTR_PERSON]])
+    else:
+        user_id = await user_id_for_name(hass, call.data[ATTR_USER])
     await call_server(
         coordinator,
         lambda: coordinator.client.set_role(acting, user_id, call.data[ATTR_ROLE]),
