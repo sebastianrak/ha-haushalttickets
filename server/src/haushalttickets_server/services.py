@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from . import permissions as perm
 from .enums import (
+    AUTOMATION_USER_ID,
     CLOSED_STATUSES,
     ApprovalState,
     AttachmentKind,
@@ -149,6 +150,8 @@ def sync_users(session: Session, items: list[UserSyncItem]) -> list[User]:
     """
     users = []
     for item in items:
+        if item.ha_user_id == AUTOMATION_USER_ID:
+            raise Invalid("reserved_user", f"{AUTOMATION_USER_ID!r} is reserved.")
         user = session.get(User, item.ha_user_id)
         if user is None:
             user = User(
@@ -168,6 +171,8 @@ def sync_users(session: Session, items: list[UserSyncItem]) -> list[User]:
 def set_role(session: Session, actor: Actor, user: User, role: Role) -> None:
     """Change the role of a user."""
     perm.check_admin(actor)
+    if user.ha_user_id == AUTOMATION_USER_ID:
+        raise Invalid("reserved_user", "The role of the user Automation is fixed.")
     if user.ha_user_id == actor.user_id and role != Role.ADMIN:
         raise Invalid("own_admin_role", "Admins cannot remove their own admin role.")
     user.role = role

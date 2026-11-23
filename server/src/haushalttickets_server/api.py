@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from . import services
 from .config import Settings
-from .enums import AttachmentKind, Via
+from .enums import AUTOMATION_USER_ID, AttachmentKind, Via
 from .models import User
 from .permissions import Actor, check_admin
 from .schemas import (
@@ -118,6 +118,14 @@ def get_actor(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "invalid_via", "detail": "via=system needs no user."},
+        )
+    if (via == Via.AUTOMATION) != (x_acting_user == AUTOMATION_USER_ID):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "invalid_via",
+                "detail": f"via=automation belongs to the user {AUTOMATION_USER_ID!r}.",
+            },
         )
     user = session.get(User, x_acting_user)
     if user is None or not user.active:

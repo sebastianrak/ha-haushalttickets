@@ -23,7 +23,7 @@ from haushalttickets_server import services
 from haushalttickets_server.app import create_app
 from haushalttickets_server.config import Settings
 from haushalttickets_server.db import upgrade
-from haushalttickets_server.enums import Role
+from haushalttickets_server.enums import AUTOMATION_USER_ID, Role
 from haushalttickets_server.models import Base, User
 from haushalttickets_server.schemas import UserSyncItem
 
@@ -42,7 +42,9 @@ HOUSEHOLD = {
 
 
 def uid(name: str) -> str:
-    """Home Assistant user id of a household member."""
+    """Home Assistant user id of a household member (or ``automation``)."""
+    if name == AUTOMATION_USER_ID:
+        return AUTOMATION_USER_ID
     return HOUSEHOLD[name][0]
 
 
@@ -104,6 +106,14 @@ def household(app: FastAPI) -> None:
         )
         for user_id, _, _, role in HOUSEHOLD.values():
             session.get(User, user_id).role = role
+        # Migration 0002 creates this user; the per-test TRUNCATE removes it again.
+        session.execute(
+            text(
+                "INSERT INTO users (ha_user_id, display_name, role, ha_is_admin, active) "
+                "VALUES ('automation', 'Automation', 'adult', false, true) "
+                "ON CONFLICT DO NOTHING"
+            )
+        )
         session.commit()
 
 

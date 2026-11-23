@@ -60,11 +60,15 @@ class Via(StrEnum):
     NIGHTLY_RUN = "nightly_run"
     RECURRENCE = "recurrence"
     EMERGENCY_UI = "emergency_ui"
+    AUTOMATION = "automation"
     SYSTEM = "system"
 
 
 # Changes through these channels follow the AI rules, whoever is logged in.
 AI_VIAS = frozenset({Via.MCP, Via.NIGHTLY_RUN})
+
+# Home Assistant automations and scripts act as this user (created by migration 0002).
+AUTOMATION_USER_ID = "automation"
 
 
 class ApprovalState(StrEnum):
