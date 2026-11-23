@@ -10,11 +10,16 @@ On the Proxmox VE host, as root:
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/sebastianrak/ha-haushalttickets/main/deploy/proxmox/create-lxc.sh
 less create-lxc.sh
-bash create-lxc.sh --allowed-clients <home-assistant-ip>
+bash create-lxc.sh
 ```
 
-Useful options (see `--help`): `--ctid`, `--storage` (default `DATA01`), `--ip 172.16.1.50/24
---gateway 172.16.1.1`, `--vlan`, `--backup-time HH:MM`, `--ref <branch>`.
+The script asks for every setting and suggests values: the next free container id,
+storages and bridges of the host, the address of the Home Assistant VM (via the QEMU
+guest agent) for the API allowlist, and a database dump time 30 minutes before the
+first vzdump job. Enter accepts a suggestion, `-` leaves a field empty. Questions are
+German when `$LANG` starts with `de`, otherwise English (`--lang de|en`).
+
+Every setting can also be passed as an option (`--help`); with `--yes` nothing is asked.
 
 The script
 
@@ -24,7 +29,8 @@ The script
 4. runs `deploy/lxc/install.sh`, which installs PostgreSQL, the server, the systemd units
    and prints the **API token** once.
 
-Add the container to your vzdump backup job if the job does not back up all guests.
+At the end the script checks the vzdump job: if it lists guests explicitly, it offers to
+add the new container.
 
 ## Layout inside the container
 
