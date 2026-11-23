@@ -109,6 +109,15 @@ echo "==> Tools"
 install -m 0755 "$SRC_DIR/deploy/lxc/haushalttickets-update" /usr/local/sbin/haushalttickets-update
 install -m 0755 "$SRC_DIR/deploy/lxc/haushalttickets-backup" /usr/local/sbin/haushalttickets-backup
 install -m 0755 "$SRC_DIR/deploy/lxc/haushalttickets-ctl" /usr/local/sbin/haushalttickets-ctl
+# `pct enter` starts a non-login shell with PATH=/sbin:/bin:/usr/sbin:/usr/bin, so the
+# tools above would only work with their full path.
+if ! grep -q '# haushalttickets: PATH' /root/.bashrc 2>/dev/null; then
+  cat >>/root/.bashrc <<'BASHRC'
+
+# haushalttickets: PATH for the admin tools in /usr/local/sbin
+case ":$PATH:" in *:/usr/local/sbin:*) ;; *) PATH="/usr/local/sbin:/usr/local/bin:$PATH" ;; esac
+BASHRC
+fi
 
 echo "==> Server"
 /usr/local/sbin/haushalttickets-update --source "$SRC_DIR" --no-restart
