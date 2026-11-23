@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.coverage
+htmlcov/
+.DS_Store
+# Never commit local secrets or real household data
+.env
+*.local.*
+secrets.yaml
