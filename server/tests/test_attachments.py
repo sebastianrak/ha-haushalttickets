@@ -18,8 +18,8 @@ def upload(api: Api, name: str, ticket_id: int = 1, data: bytes = PNG, **kwargs)
 
 
 def test_upload_download_delete(api: Api, app) -> None:
-    create(api, "sarah")
-    response = upload(api, "sarah")
+    create(api, "robin")
+    response = upload(api, "robin")
     assert response.status_code == 201, response.text
     attachment = response.json()
     assert attachment["filename"] == "hahn.png"
@@ -35,38 +35,37 @@ def test_upload_download_delete(api: Api, app) -> None:
 
     path = Path(app.state.settings.attachments_dir) / "1" / attachment["id"]
     assert path.exists()
-    response = api("sebastian", "mcp").delete(f"/api/v1/attachments/{attachment['id']}")
+    response = api("alex", "mcp").delete(f"/api/v1/attachments/{attachment['id']}")
     assert error_code(response) == "ai_delete_forbidden"
     assert (
-        api("sarah").delete(f"/api/v1/attachments/{attachment['id']}").status_code
+        api("robin").delete(f"/api/v1/attachments/{attachment['id']}").status_code
         == 204
     )
     assert not path.exists()
 
 
 def test_invoice_kind_and_limits(api: Api) -> None:
-    create(api, "sarah", type="purchase", title="Waschmaschine")
-    invoice = upload(api, "sarah", kind="invoice", content_type="application/pdf")
+    create(api, "robin", type="purchase", title="Waschmaschine")
+    invoice = upload(api, "robin", kind="invoice", content_type="application/pdf")
     assert invoice.json()["kind"] == "invoice"
-    assert upload(api, "sarah", data=b"0" * 2048).status_code == 413
-    assert upload(api, "sarah", content_type="text/html").status_code == 415
+    assert upload(api, "robin", data=b"0" * 2048).status_code == 413
+    assert upload(api, "robin", content_type="text/html").status_code == 415
 
 
 def test_who_may_upload_and_delete(api: Api) -> None:
-    create(api, "sarah")
+    create(api, "robin")
     assert error_code(upload(api, "kind")) == "not_own_ticket"
-    attachment = upload(api, "sarah").json()
+    attachment = upload(api, "robin").json()
     response = api("kind").delete(f"/api/v1/attachments/{attachment['id']}")
     assert error_code(response) == "forbidden"
     assert (
-        api("sebastian").delete(f"/api/v1/attachments/{attachment['id']}").status_code
-        == 204
+        api("alex").delete(f"/api/v1/attachments/{attachment['id']}").status_code == 204
     )
 
 
 def test_ticket_delete_removes_files(api: Api, app) -> None:
-    create(api, "sarah")
-    attachment = upload(api, "sarah").json()
+    create(api, "robin")
+    attachment = upload(api, "robin").json()
     path = Path(app.state.settings.attachments_dir) / "1" / attachment["id"]
-    assert api("sebastian").delete("/api/v1/tickets/1").status_code == 204
+    assert api("alex").delete("/api/v1/tickets/1").status_code == 204
     assert not path.exists()

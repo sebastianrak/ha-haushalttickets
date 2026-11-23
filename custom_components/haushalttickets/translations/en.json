@@ -1,0 +1,232 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to the Haushalttickets server",
+        "description": "The installer printed the API token once. The server only accepts Home Assistant if its address is listed in ALLOWED_CLIENTS.",
+        "data": {
+          "url": "Server URL",
+          "api_token": "API token"
+        },
+        "data_description": {
+          "url": "For example http://192.168.1.20:8080",
+          "api_token": "Created on the server with haushalttickets-ctl token create"
+        }
+      },
+      "reauth_confirm": {
+        "title": "New API token",
+        "description": "The server at {url} rejected the token. Create a new one on the server and enter it here.",
+        "data": {
+          "api_token": "API token"
+        }
+      },
+      "reconfigure": {
+        "title": "Change server URL",
+        "data": {
+          "url": "Server URL"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "The server cannot be reached or is not a Haushalttickets server.",
+      "invalid_auth": "The server rejected the API token.",
+      "client_not_allowed": "The server does not accept connections from this Home Assistant. Add its address to ALLOWED_CLIENTS in /etc/haushalttickets/server.env.",
+      "invalid_url": "Enter a URL such as http://192.168.1.20:8080.",
+      "unknown": "Unexpected error, see the log."
+    },
+    "abort": {
+      "single_instance_allowed": "Haushalttickets is already set up.",
+      "reauth_successful": "The new token works.",
+      "reconfigure_successful": "The new URL works."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "open": {
+        "name": "Open tickets"
+      },
+      "burning": {
+        "name": "Burning tickets"
+      },
+      "approval_pending": {
+        "name": "Approvals pending"
+      },
+      "acceptance": {
+        "name": "Awaiting acceptance"
+      },
+      "assigned": {
+        "name": "{person} assigned"
+      },
+      "to_accept": {
+        "name": "{person} to accept"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_auth": {
+      "message": "The Haushalttickets server rejected the API token."
+    },
+    "cannot_connect": {
+      "message": "The Haushalttickets server cannot be reached: {error}"
+    },
+    "update_failed": {
+      "message": "Updating from the Haushalttickets server failed: {error}"
+    },
+    "not_loaded": {
+      "message": "Haushalttickets is not set up or not loaded."
+    },
+    "not_a_person": {
+      "message": "{entity_id} is not a person."
+    },
+    "person_without_user": {
+      "message": "{entity_id} is not linked to a Home Assistant user."
+    },
+    "forbidden": {
+      "message": "Not allowed ({code}): {detail}"
+    },
+    "not_found": {
+      "message": "Not found: {detail}"
+    },
+    "rejected": {
+      "message": "The server rejected the request ({code}): {detail}"
+    },
+    "reserved_fields": {
+      "message": "Set these through their own options, not extra_fields: {fields}"
+    }
+  },
+  "selector": {
+    "ticket_type": {
+      "options": {
+        "repair": "Repair",
+        "purchase": "Purchase",
+        "home_assistant": "Home Assistant"
+      }
+    },
+    "urgency": {
+      "options": {
+        "someday": "Someday",
+        "this_week": "This week",
+        "burning": "Burning"
+      }
+    },
+    "status": {
+      "options": {
+        "new": "New",
+        "discussing": "Discussing",
+        "in_progress": "In progress",
+        "waiting_for_parts": "Waiting for parts",
+        "acceptance": "Acceptance",
+        "done": "Done",
+        "rejected": "Rejected"
+      }
+    },
+    "role": {
+      "options": {
+        "admin": "Admin",
+        "adult": "Adult",
+        "child": "Child",
+        "ai_agent": "AI agent"
+      }
+    }
+  },
+  "services": {
+    "create_ticket": {
+      "name": "Create ticket",
+      "description": "Creates a ticket. Started by a person, it is filed for that person; started by an automation, for the user Automation.",
+      "fields": {
+        "type": {
+          "name": "Type",
+          "description": "Kind of ticket."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Short summary."
+        },
+        "description": {
+          "name": "Description",
+          "description": "Details."
+        },
+        "urgency": {
+          "name": "Urgency",
+          "description": "How soon it must be done."
+        },
+        "due_date": {
+          "name": "Due date",
+          "description": "Date by which it should be done."
+        },
+        "assignees": {
+          "name": "Assignees",
+          "description": "Persons responsible; each must be linked to a user."
+        },
+        "area_id": {
+          "name": "Area",
+          "description": "Area concerned (repairs and Home Assistant work)."
+        },
+        "device_id": {
+          "name": "Device",
+          "description": "Device concerned (repairs and Home Assistant work)."
+        },
+        "extra_fields": {
+          "name": "Extra fields",
+          "description": "Further ticket fields of the server API, for example price_estimated or vendor for purchases."
+        }
+      }
+    },
+    "set_status": {
+      "name": "Set status",
+      "description": "Moves a ticket to another status.",
+      "fields": {
+        "ticket_id": {
+          "name": "Ticket",
+          "description": "Ticket number."
+        },
+        "status": {
+          "name": "Status",
+          "description": "New status."
+        }
+      }
+    },
+    "add_comment": {
+      "name": "Add comment",
+      "description": "Adds a comment to a ticket.",
+      "fields": {
+        "ticket_id": {
+          "name": "Ticket",
+          "description": "Ticket number."
+        },
+        "comment": {
+          "name": "Comment",
+          "description": "Text of the comment."
+        }
+      }
+    },
+    "assign": {
+      "name": "Assign",
+      "description": "Replaces the assignees of a ticket.",
+      "fields": {
+        "ticket_id": {
+          "name": "Ticket",
+          "description": "Ticket number."
+        },
+        "assignees": {
+          "name": "Assignees",
+          "description": "Persons responsible; each must be linked to a user."
+        }
+      }
+    },
+    "set_role": {
+      "name": "Set role",
+      "description": "Sets the role of a household member in the ticket system. Home Assistant admins only; the server also requires its admin role.",
+      "fields": {
+        "person": {
+          "name": "Person",
+          "description": "Person linked to the user."
+        },
+        "role": {
+          "name": "Role",
+          "description": "Adults approve purchases, children may only file and accept their own tickets, the AI agent follows the AI rules."
+        }
+      }
+    }
+  }
+}

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from .enums import (
     AI_VIAS,
+    AUTOMATION_USER_ID,
     CLOSED_STATUSES,
     OPEN_STATUSES,
     ApprovalState,
@@ -78,6 +79,11 @@ class Actor:
         return self.via in AI_VIAS or (
             self.user is not None and self.user.role == Role.AI_AGENT
         )
+
+    @property
+    def is_automation(self) -> bool:
+        """A Home Assistant automation or script."""
+        return self.via == Via.AUTOMATION or self.user_id == AUTOMATION_USER_ID
 
     @property
     def role(self) -> Role | None:
@@ -200,7 +206,7 @@ def check_approval(actor: Actor, ticket: Ticket) -> None:
         _deny("not_a_purchase", "Only purchases need approval.")
     if ticket.approval_state not in (ApprovalState.PENDING, ApprovalState.DECLINED):
         _deny("approval_not_pending", "This purchase does not await approval.")
-    if not actor.is_human(*ADULTS):
+    if not actor.is_human(*ADULTS) or actor.is_automation:
         _deny("approval_forbidden", "Only adults may approve purchases.")
     if actor.requested(ticket):
         _deny("approval_by_other_adult", "The other adult has to approve.")
@@ -211,7 +217,7 @@ def check_ai_flags(
 ) -> None:
     """Set "AI should draft" / "AI should implement"."""
     require_user(actor)
-    if not actor.is_human(*ADULTS):
+    if not actor.is_human(*ADULTS) or actor.is_automation:
         _deny("ai_flags_forbidden", "Only adults may give the AI approvals.")
     if implement and ticket.type != TicketType.HOME_ASSISTANT:
         _deny("implement_not_applicable", "Only Home Assistant work is implemented.")
@@ -254,12 +260,12 @@ def check_attachment_delete(actor: Actor, attachment: Attachment) -> None:
 def check_delete(actor: Actor) -> None:
     """Delete a ticket."""
     require_user(actor)
-    if not actor.is_human(Role.ADMIN):
+    if not actor.is_human(Role.ADMIN) or actor.is_automation:
         _deny("delete_forbidden", "Only admins delete tickets.")
 
 
 def check_admin(actor: Actor) -> None:
     """Change roles or settings."""
     require_user(actor)
-    if not actor.is_human(Role.ADMIN):
+    if not actor.is_human(Role.ADMIN) or actor.is_automation:
         _deny("admin_required", "Admins only.")

@@ -3,8 +3,9 @@
 A ticket system for a household – repairs, purchases and work on Home Assistant itself –
 with a Home Assistant integration and AI access over MCP.
 
-> **Status: pre-alpha.** Nothing here is ready for use yet. The repository currently
-> contains the project scaffold and a feasibility spike.
+> **Status: pre-alpha.** Server and the core of the integration (sensors, actions,
+> events) work; the Kanban card, MCP tools, notifications, recurring tickets, the
+> emergency UI and the nightly run are still to come.
 
 ## Idea
 
@@ -33,7 +34,7 @@ claude.ai ──Nabu Casa──▶ Home Assistant ── mcp_server (/api/mcp/ha
 | Part | Path | Purpose |
 |---|---|---|
 | Server | `server/` | FastAPI + PostgreSQL in a Debian LXC; source of truth for tickets, attachments, history |
-| Integration | `custom_components/haushalttickets/` *(planned)* | To-do entities per type, sensors, events, actions, LLM API for MCP, bundled Kanban card |
+| Integration | `custom_components/haushalttickets/` | Sensors, events, actions, WebSocket API; later LLM API for MCP and the Kanban card, see [docs/integration.md](docs/integration.md) |
 | Spike | `spike/` | Throwaway proof that integration-provided tools reach MCP clients via `mcp_server` |
 | Docs | `docs/` | Architecture and decisions |
 
@@ -59,7 +60,11 @@ See [docs/architecture.md](docs/architecture.md), [docs/data-model.md](docs/data
 # server
 cd server && uv run --extra test pytest
 
-# spike (Home Assistant test harness)
+# integration (Home Assistant test harness; starts the server from server/.venv)
+(cd server && uv sync) && uv venv .venv-ha --python 3.14 \
+  && uv pip install --python .venv-ha -r requirements_test.txt && .venv-ha/bin/python -m pytest
+
+# spike
 cd spike && uv pip install -r requirements_test.txt && python -m pytest
 ```
 

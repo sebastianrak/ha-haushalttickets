@@ -4,9 +4,9 @@ from .conftest import Api, create
 
 
 def test_feed_pages_by_sequence(api: Api) -> None:
-    create(api, "sarah")
-    create(api, "sarah")
-    api("sarah").post("/api/v1/tickets/1/comments", json={"body": "Hallo"})
+    create(api, "robin")
+    create(api, "robin")
+    api("robin").post("/api/v1/tickets/1/comments", json={"body": "Hallo"})
     feed = api().get("/api/v1/events").json()
     assert feed["last_seq"] == 3
     assert [e["type"] for e in feed["events"]] == [
@@ -16,6 +16,6 @@ def test_feed_pages_by_sequence(api: Api) -> None:
     ]
     later = api().get("/api/v1/events", params={"after": 2}).json()
     assert [e["seq"] for e in later["events"]] == [3]
-    assert later["events"][0]["actor_id"] == "u-sarah"
+    assert later["events"][0]["actor_id"] == "u-robin"
     page = api().get("/api/v1/events", params={"limit": 1}).json()
     assert len(page["events"]) == 1
