@@ -295,8 +295,12 @@ fi
 
 step "$(L "Debian-13-Vorlage" "Debian 13 template")"
 pveam update >/dev/null
-TEMPLATE=$(pveam available --section system | awk '$2 ~ /^debian-13-standard_/ {print $2}' | sort -V | tail -n1)
-[[ -n $TEMPLATE ]] || die "$(L "Keine debian-13-standard-Vorlage verfügbar." "No debian-13-standard template available.")"
+# Proxmox offers the template for several architectures; pick the host's (amd64, arm64).
+ARCH=$(dpkg --print-architecture)
+TEMPLATE=$(pveam available --section system |
+  awk -v arch="$ARCH" '$2 ~ ("^debian-13-standard_.*_" arch "\\.tar") {print $2}' | sort -V | tail -n1)
+[[ -n $TEMPLATE ]] || die "$(L "Keine debian-13-standard-Vorlage für $ARCH verfügbar." "No debian-13-standard template for $ARCH available.")"
+say "$TEMPLATE"
 if ! pveam list "$TEMPLATE_STORAGE" | grep -q "$TEMPLATE"; then
   pveam download "$TEMPLATE_STORAGE" "$TEMPLATE"
 fi
@@ -321,8 +325,20 @@ CREATE_ARGS=(
 )
 [[ -n $NAMESERVER ]] && CREATE_ARGS+=(--nameserver "$NAMESERVER")
 
+CREATED_CT=""
+cleanup_hint() {
+  local status=$?
+  if [[ $status -ne 0 && -n $CREATED_CT ]]; then
+    printf '\n%s\n  pct destroy %s --force\n' \
+      "$(L "Abbruch nach dem Anlegen. Den Container entfernst du mit:" "Aborted after creating the container. Remove it with:")" \
+      "$CREATED_CT" >&2
+  fi
+}
+trap cleanup_hint EXIT
+
 step "$(L "Container $CTID anlegen" "Creating container $CTID")"
 pct create "$CTID" "$TEMPLATE_STORAGE:vztmpl/$TEMPLATE" "${CREATE_ARGS[@]}"
+CREATED_CT=$CTID
 pct start "$CTID"
 
 step "$(L "Warte auf Netzwerk" "Waiting for network")"
@@ -334,8 +350,8 @@ for _ in $(seq 1 60); do
   fi
   sleep 2
 done
-[[ $online -eq 1 ]] || die "$(L "Container $CTID hat kein Netzwerk (Bridge, VLAN, IP prüfen). Entfernen: pct destroy $CTID --force" \
-                               "Container $CTID has no network (check bridge, VLAN, IP). Remove it: pct destroy $CTID --force")"
+[[ $online -eq 1 ]] || die "$(L "Container $CTID hat kein Netzwerk (Bridge, VLAN, IP prüfen)." \
+                               "Container $CTID has no network (check bridge, VLAN, IP).")"
 
 step "$(L "Haushalttickets holen" "Fetching Haushalttickets") ($REF)"
 pct exec "$CTID" -- bash -c \
