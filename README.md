@@ -37,7 +37,7 @@ claude.ai ──Nabu Casa──▶ Home Assistant ── mcp_server (/api/mcp/ha
 | Spike | `spike/` | Throwaway proof that integration-provided tools reach MCP clients via `mcp_server` |
 | Docs | `docs/` | Architecture and decisions |
 
-See [docs/architecture.md](docs/architecture.md) for details.
+See [docs/architecture.md](docs/architecture.md) and [docs/data-model.md](docs/data-model.md) for details.
 
 ## Key rules
 
