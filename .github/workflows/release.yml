@@ -1,0 +1,36 @@
+name: Release
+
+# Push a tag like v0.1.0. The tag must match the server version.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+      - name: Check version
+        run: |
+          version=$(grep -Po '__version__ = "\K[^"]+' server/src/haushalttickets_server/__init__.py)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME does not match server version $version"; exit 1; }
+          if [ -f custom_components/haushalttickets/manifest.json ]; then
+            manifest=$(python3 -c 'import json; print(json.load(open("custom_components/haushalttickets/manifest.json"))["version"])')
+            test "$manifest" = "$version" || { echo "Integration version $manifest differs"; exit 1; }
+          fi
+      - name: Build
+        working-directory: server
+        run: |
+          uv build --wheel --out-dir ../dist
+          cp requirements.txt ../dist/requirements.txt
+          cd ../dist && sha256sum -- *.whl requirements.txt > SHA256SUMS
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag

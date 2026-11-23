@@ -1,5 +1,7 @@
 """FastAPI application."""
 
+from ipaddress import ip_address
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -18,6 +20,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.engine = make_engine(settings.database_url)
     app.state.sessionmaker = make_sessionmaker(app.state.engine)
+
+    @app.middleware("http")
+    async def allowed_clients(request: Request, call_next):
+        """Refuse clients outside ``allowed_clients`` (health stays reachable)."""
+        networks = settings.allowed_networks
+        if networks and request.url.path != "/api/health":
+            try:
+                client = ip_address(request.client.host if request.client else "")
+            except ValueError:
+                client = None
+            if client is None or not any(client in network for network in networks):
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": {
+                            "code": "client_not_allowed",
+                            "detail": "This address may not use the API.",
+                        }
+                    },
+                )
+        return await call_next(request)
 
     @app.get("/api/health")
     async def health() -> dict[str, str]:

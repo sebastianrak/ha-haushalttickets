@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Dump the Haushalttickets database so every vzdump contains a consistent copy.
+#   haushalttickets-backup [LABEL]     (default label: daily)
+# Dumps older than KEEP_DAYS (default 14) are removed. Attachments are plain files in
+# /var/lib/haushalttickets and are covered by vzdump directly.
+set -euo pipefail
+
+BACKUP_DIR="/var/backups/haushalttickets"
+KEEP_DAYS="${KEEP_DAYS:-14}"
+LABEL="${1:-daily}"
+FILE="$BACKUP_DIR/haushalttickets-$(date +%Y%m%d-%H%M%S)-$LABEL.dump"
+
+cd "$BACKUP_DIR"
+runuser -u haushalttickets -- pg_dump --format=custom --file="$FILE.part" haushalttickets
+mv "$FILE.part" "$FILE"
+find "$BACKUP_DIR" -name 'haushalttickets-*.dump' -mtime +"$KEEP_DAYS" -delete
+echo "$FILE"

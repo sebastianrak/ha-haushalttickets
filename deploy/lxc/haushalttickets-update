@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# Install or update the Haushalttickets server.
+#
+#   haushalttickets-update                    # latest GitHub release
+#   haushalttickets-update --release v0.2.0   # a specific release (also for rollback)
+#   haushalttickets-update --ref main         # a git branch or tag (development)
+#   haushalttickets-update --source DIR       # a local checkout
+#
+# Release assets are verified against SHA256SUMS, dependencies against the hashes in
+# requirements.txt. The database is dumped before migrating.
+set -euo pipefail
+
+REPO="sebastianrak/ha-haushalttickets"
+VENV="/opt/haushalttickets/venv"
+ENV_FILE="/etc/haushalttickets/server.env"
+MODE="release"
+TARGET="latest"
+RESTART=1
+
+die() { echo "Error: $*" >&2; exit 1; }
+have_systemd() { [[ -d /run/systemd/system ]]; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --release) MODE="release"; TARGET="$2"; shift 2 ;;
+    --ref) MODE="ref"; TARGET="$2"; shift 2 ;;
+    --source) MODE="source"; TARGET="$2"; shift 2 ;;
+    --no-restart) RESTART=0; shift ;;
+    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    *) die "unknown option $1" ;;
+  esac
+done
+
+[[ $EUID -eq 0 ]] || die "run as root"
+
+version() {
+  "$VENV/bin/python" -c 'import haushalttickets_server as m; print(m.__version__)' 2>/dev/null || echo "none"
+}
+
+if [[ ! -x $VENV/bin/python ]]; then
+  install -d -m 0755 "$(dirname "$VENV")"
+  python3 -m venv "$VENV"
+fi
+CURRENT=$(version)
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+case "$MODE" in
+  release)
+    if [[ $TARGET == latest ]]; then
+      api="https://api.github.com/repos/$REPO/releases/latest"
+    else
+      api="https://api.github.com/repos/$REPO/releases/tags/$TARGET"
+    fi
+    curl -fsSL "$api" -o "$WORK/release.json" || die "release $TARGET not found (no release yet? use --ref main)"
+    python3 - "$WORK/release.json" >"$WORK/assets" <<'EOF'
+import json, sys
+for asset in json.load(open(sys.argv[1]))["assets"]:
+    name = asset["name"]
+    if name.endswith(".whl") or name in ("requirements.txt", "SHA256SUMS"):
+        print(name, asset["browser_download_url"])
+EOF
+    while read -r name url; do
+      curl -fsSL "$url" -o "$WORK/$name"
+    done <"$WORK/assets"
+    [[ -f $WORK/SHA256SUMS && -f $WORK/requirements.txt ]] || die "release is missing assets"
+    (cd "$WORK" && sha256sum --check --quiet SHA256SUMS) || die "checksum mismatch"
+    REQUIREMENTS="$WORK/requirements.txt"
+    PACKAGE=$(find "$WORK" -maxdepth 1 -name 'haushalttickets_server-*.whl' | head -n1)
+    [[ -n $PACKAGE ]] || die "release has no server wheel"
+    ;;
+  ref)
+    git clone --quiet --depth 1 --branch "$TARGET" "https://github.com/$REPO" "$WORK/src"
+    REQUIREMENTS="$WORK/src/server/requirements.txt"
+    PACKAGE="$WORK/src/server"
+    ;;
+  source)
+    REQUIREMENTS="$TARGET/server/requirements.txt"
+    PACKAGE="$TARGET/server"
+    ;;
+esac
+
+if [[ $CURRENT != none ]]; then
+  echo "==> Database dump before update"
+  /usr/local/sbin/haushalttickets-backup "pre-update-$CURRENT"
+fi
+
+echo "==> Installing ($MODE $TARGET)"
+"$VENV/bin/pip" install --quiet --disable-pip-version-check --require-hashes -r "$REQUIREMENTS"
+"$VENV/bin/pip" install --quiet --disable-pip-version-check --no-deps --force-reinstall "$PACKAGE"
+NEW=$(version)
+
+echo "==> Migrating database"
+/usr/local/sbin/haushalttickets-ctl migrate
+
+if [[ $RESTART -eq 1 ]] && have_systemd && systemctl is-enabled --quiet haushalttickets 2>/dev/null; then
+  systemctl restart haushalttickets
+  port=$(grep -Po '^HAUSHALTTICKETS_PORT=\K[0-9]+' "$ENV_FILE" || echo 8080)
+  for _ in $(seq 1 30); do
+    if curl -fsS "http://127.0.0.1:$port/api/health" >/dev/null 2>&1; then
+      echo "Haushalttickets $CURRENT -> $NEW, running."
+      exit 0
+    fi
+    sleep 1
+  done
+  cat >&2 <<EOF
+Error: the server does not answer after the update ($CURRENT -> $NEW).
+  Logs:      journalctl -u haushalttickets -n 50
+  Rollback:  haushalttickets-update --release v$CURRENT
+             plus restoring the database dump in /var/backups/haushalttickets
+             if the migration changed the schema (see deploy/README.md).
+EOF
+  exit 1
+fi
+echo "Haushalttickets $CURRENT -> $NEW installed."
