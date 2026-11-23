@@ -45,6 +45,13 @@ jobs:
         with:
           python-version: "3.13"
       - run: uv run --extra test pytest -q
+      - name: requirements.txt matches uv.lock
+        run: |
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt -o requirements.txt
+          git diff --exit-code requirements.txt
+      - name: Shell scripts
+        working-directory: .
+        run: shellcheck deploy/proxmox/*.sh deploy/lxc/*.sh deploy/lxc/haushalttickets-*
 
   spike:
     runs-on: ubuntu-latest

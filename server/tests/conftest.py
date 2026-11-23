@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 import os
+
+# Never pick up the settings file of a real installation.
+os.environ["HAUSHALTTICKETS_ENV_FILE"] = "/nonexistent/server.env"
 from typing import Any
 
 from fastapi import FastAPI

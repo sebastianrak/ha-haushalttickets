@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily Haushalttickets database dump (before the vzdump window)
+
+[Timer]
+OnCalendar=*-*-* @BACKUP_TIME@:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

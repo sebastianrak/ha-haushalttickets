@@ -103,7 +103,6 @@ wheels = [
 
 [[package]]
 name = "haushalttickets-server"
-version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },

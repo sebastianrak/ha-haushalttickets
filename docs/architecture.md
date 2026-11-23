@@ -12,8 +12,13 @@ Decided on 2026-11-23. Changes to this list are made by pull request.
 ## Components
 
 ### Server (`server/`)
-- Python, FastAPI, PostgreSQL in the same unprivileged Debian LXC, run by systemd,
-  installed with uv. An update script installs tagged GitHub releases.
+- Python, FastAPI, PostgreSQL in the same unprivileged Debian LXC, run by systemd.
+  Dependencies are locked with uv (`uv.lock`) and exported with hashes to
+  `server/requirements.txt`; the container installs them with pip into a venv, so uv
+  itself is not needed there. An update script installs tagged GitHub releases
+  (see [deploy/README.md](../deploy/README.md)).
+- Only the configured clients (normally Home Assistant) may call the API
+  (`HAUSHALTTICKETS_ALLOWED_CLIENTS`), in addition to the bearer token.
 - Attachments are stored inside the LXC next to the database.
 - Backups: the existing Proxmox vzdump schedule, plus a nightly `pg_dump` that runs
   before the vzdump window so every backup contains a consistent dump.

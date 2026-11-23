@@ -1,6 +1,6 @@
 [project]
 name = "haushalttickets-server"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Ticket server for Haushalttickets (runs in a Debian LXC)"
 readme = "README.md"
 license = "MIT"
@@ -27,6 +27,9 @@ haushalttickets-server = "haushalttickets_server.__main__:main"
 [build-system]
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/haushalttickets_server/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/haushalttickets_server"]

@@ -1,0 +1,26 @@
+[Unit]
+Description=Haushalttickets server
+Documentation=https://github.com/sebastianrak/ha-haushalttickets
+Requires=postgresql.service
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=haushalttickets
+Group=haushalttickets
+WorkingDirectory=/var/lib/haushalttickets
+EnvironmentFile=/etc/haushalttickets/server.env
+ExecStart=/opt/haushalttickets/venv/bin/haushalttickets-server serve
+Restart=on-failure
+RestartSec=5
+# Sandboxing. If the service fails with status 226/NAMESPACE in the container,
+# enable "nesting" for the container or remove the Protect*/Private* lines.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/haushalttickets
+
+[Install]
+WantedBy=multi-user.target

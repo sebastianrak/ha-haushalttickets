@@ -1,0 +1,8 @@
+[Unit]
+Description=Haushalttickets database dump
+Requires=postgresql.service
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/haushalttickets-backup daily

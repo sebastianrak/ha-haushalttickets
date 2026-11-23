@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Run the server command line as the service user, e.g.
+#   haushalttickets-ctl migrate
+#   haushalttickets-ctl token create homeassistant
+set -euo pipefail
+cd /var/lib/haushalttickets
+exec runuser -u haushalttickets -- /opt/haushalttickets/venv/bin/haushalttickets-server "$@"
