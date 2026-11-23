@@ -39,14 +39,14 @@ def test_automation_creates_and_closes_own_ticket(api: Api) -> None:
 
 def test_via_and_user_must_match(api: Api) -> None:
     assert (
-        error_code(api("sarah", "automation").get("/api/v1/tickets")) == "invalid_via"
+        error_code(api("robin", "automation").get("/api/v1/tickets")) == "invalid_via"
     )
     assert error_code(api("automation", "ui").get("/api/v1/tickets")) == "invalid_via"
 
 
 def test_automation_cannot_approve_purchases(api: Api) -> None:
     ticket = create(
-        api, "sarah", type="purchase", title="Waschmaschine", price_estimated="899.00"
+        api, "robin", type="purchase", title="Waschmaschine", price_estimated="899.00"
     )
     assert ticket["approval_state"] == "pending"
     response = api("automation", "automation").post(
@@ -72,9 +72,7 @@ def test_automation_cannot_set_ai_flags_or_delete(api: Api) -> None:
 
 
 def test_automation_user_is_reserved(api: Api, app) -> None:
-    response = api("sebastian").patch(
-        "/api/v1/users/automation", json={"role": "admin"}
-    )
+    response = api("alex").patch("/api/v1/users/automation", json={"role": "admin"})
     assert response.status_code == 422
     assert error_code(response) == "reserved_user"
     response = api().post(

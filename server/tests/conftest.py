@@ -34,8 +34,8 @@ DB_URL = os.environ.get(
 
 # name -> (Home Assistant user id, display name, HA admin, role)
 HOUSEHOLD = {
-    "sebastian": ("u-sebastian", "Sebastian", True, Role.ADMIN),
-    "sarah": ("u-sarah", "Sarah", False, Role.ADULT),
+    "alex": ("u-alex", "Alex", True, Role.ADMIN),
+    "robin": ("u-robin", "Robin", False, Role.ADULT),
     "kind": ("u-kind", "Kind", False, Role.CHILD),
     "ki": ("u-ki", "KI-Hausmeister", True, Role.AI_AGENT),
 }
@@ -95,7 +95,7 @@ def token(app: FastAPI) -> str:
 
 @pytest.fixture
 def household(app: FastAPI) -> None:
-    """Sebastian (admin), Sarah (adult), Kind (child), KI-Hausmeister (AI agent)."""
+    """Alex (admin), Robin (adult), Kind (child), KI-Hausmeister (AI agent)."""
     with app.state.sessionmaker() as session:
         services.sync_users(
             session,
@@ -143,7 +143,7 @@ class _As:
 
 
 class Api:
-    """Test client acting as a household member: ``api("sarah").post(...)``."""
+    """Test client acting as a household member: ``api("robin").post(...)``."""
 
     def __init__(self, client: TestClient, token: str) -> None:
         self.client = client
@@ -163,7 +163,7 @@ def api(app: FastAPI, token: str, household: None) -> Api:
     return Api(TestClient(app), token)
 
 
-def create(api: Api, name: str = "sebastian", via: str = "ui", **body: Any) -> dict:
+def create(api: Api, name: str = "alex", via: str = "ui", **body: Any) -> dict:
     """Create a ticket and return it."""
     body.setdefault("type", "repair")
     body.setdefault("title", "Wasserhahn Küche tropft")
