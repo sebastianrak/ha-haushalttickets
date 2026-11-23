@@ -11,12 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-import probatio
-
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import llm
 from homeassistant.util import dt as dt_util
+import probatio
 
 from .const import (
     DOMAIN,

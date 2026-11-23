@@ -5,12 +5,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import llm
 from homeassistant.setup import async_setup_component
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.haushalttickets_spike.const import (
     DOMAIN,
