@@ -27,9 +27,14 @@ Decided on 2026-11-23. Changes to this list are made by pull request.
 - Nightly AI run (Claude Code) at 03:00 via systemd timer.
 
 ### Integration (`custom_components/haushalttickets/`)
-- Config flow: server URL + API token.
-- One to-do entity per ticket type, sensors (open, burning, overdue, waiting for
-  acceptance), events, actions.
+- Config flow: server URL + API token (reauth and reconfigure supported).
+- No to-do entities: the server is the only ticket store. The integration provides
+  sensors (household-wide and per person), the bus event `haushalttickets_event`,
+  actions and WebSocket commands for the card, see [integration.md](integration.md).
+- Home Assistant users are synced to the server; automations and scripts without a
+  user act as the server user **Automation** (channel `automation`), which may file,
+  comment and close its own tickets but never approve, set AI flags, delete or
+  administrate.
 - Photo upload and display proxied through Home Assistant to the server.
 - Registers an LLM API; Home Assistant's `mcp_server` exposes it at
   `/api/mcp/haushalttickets`. Home Assistant handles OAuth; the endpoint requires an
@@ -68,7 +73,9 @@ rejects, never deletes.
   **private** Git repository (never this one, never `secrets.yaml`). Only targeted
   changes, never whole-file overwrites. Afterwards the ticket moves to `acceptance`.
 - The run uses a dedicated Home Assistant account "KI-Hausmeister" (admin), so its
-  changes are distinguishable and its tokens can be revoked.
+  changes are distinguishable and its tokens can be revoked. Home Assistant admins
+  start as ticket admins, so this account must be set to the role `ai_agent`
+  (action `haushalttickets.set_role`) right after it is created.
 
 ## Known trade-offs
 
@@ -76,3 +83,9 @@ rejects, never deletes.
   applies at tool level, not to the Home Assistant token itself.
 - If Home Assistant is down, MCP access is down as well. The emergency UI covers
   manual use only.
+- The integration acts for the Home Assistant user in the call context. An AI that
+  controls Home Assistant with a person's token (for example through ha-mcp) therefore
+  acts as that person through the channel `ui`; only the KI-Hausmeister account and
+  the MCP tools of the integration are bound to the AI rules.
+- The integration polls the event feed every 10 seconds. Events that happened while
+  Home Assistant was down are not replayed after a restart.

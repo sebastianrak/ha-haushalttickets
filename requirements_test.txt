@@ -1,0 +1,4 @@
+# Test harness for the integration. It pins its Home Assistant version
+# (2026.10.4 at the time of writing). The tests start the real server from a
+# separate environment, see tests/conftest.py.
+pytest-homeassistant-custom-component==0.13.375

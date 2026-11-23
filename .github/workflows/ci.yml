@@ -66,6 +66,38 @@ jobs:
       - run: uv venv && uv pip install -r requirements_test.txt
       - run: .venv/bin/python -m pytest -q
 
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: hht
+          POSTGRES_PASSWORD: hht
+          POSTGRES_DB: hht_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hht"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      HAUSHALTTICKETS_TEST_DATABASE_URL: postgresql+psycopg://hht:hht@127.0.0.1:5432/hht_test
+      HAUSHALTTICKETS_TEST_REQUIRE_DB: "1"
+      HAUSHALTTICKETS_SERVER_PYTHON: ${{ github.workspace }}/server/.venv/bin/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.14"
+      - name: Server environment (Python of Debian 13)
+        working-directory: server
+        run: uv sync --frozen --no-dev --python 3.13
+      - name: Home Assistant test harness
+        run: uv venv .venv-ha --python 3.14 && uv pip install --python .venv-ha -r requirements_test.txt
+      - run: .venv-ha/bin/python -m pytest -q
+
   hassfest:
     runs-on: ubuntu-latest
     steps:
@@ -87,3 +119,5 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+          # Not listed in home-assistant/brands (yet).
+          ignore: brands

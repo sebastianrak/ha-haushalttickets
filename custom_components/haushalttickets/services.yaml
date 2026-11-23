@@ -1,0 +1,119 @@
+create_ticket:
+  fields:
+    type:
+      required: true
+      selector:
+        select:
+          translation_key: ticket_type
+          options:
+            - repair
+            - purchase
+            - home_assistant
+    title:
+      required: true
+      example: "Filter der Lüftung wechseln"
+      selector:
+        text:
+    description:
+      selector:
+        text:
+          multiline: true
+    urgency:
+      selector:
+        select:
+          translation_key: urgency
+          options:
+            - someday
+            - this_week
+            - burning
+    due_date:
+      selector:
+        date:
+    assignees:
+      selector:
+        entity:
+          domain: person
+          multiple: true
+    area_id:
+      selector:
+        area:
+    device_id:
+      selector:
+        device:
+    extra_fields:
+      advanced: true
+      example: '{"price_estimated": "49.90", "vendor": "Baumarkt"}'
+      selector:
+        object:
+
+set_status:
+  fields:
+    ticket_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 1000000
+          mode: box
+    status:
+      required: true
+      selector:
+        select:
+          translation_key: status
+          options:
+            - new
+            - discussing
+            - in_progress
+            - waiting_for_parts
+            - acceptance
+            - done
+            - rejected
+
+add_comment:
+  fields:
+    ticket_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 1000000
+          mode: box
+    comment:
+      required: true
+      selector:
+        text:
+          multiline: true
+
+assign:
+  fields:
+    ticket_id:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 1000000
+          mode: box
+    assignees:
+      required: true
+      selector:
+        entity:
+          domain: person
+          multiple: true
+
+set_role:
+  fields:
+    person:
+      required: true
+      selector:
+        entity:
+          domain: person
+    role:
+      required: true
+      selector:
+        select:
+          translation_key: role
+          options:
+            - admin
+            - adult
+            - child
+            - ai_agent

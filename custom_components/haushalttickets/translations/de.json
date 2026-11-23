@@ -1,0 +1,232 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mit dem Haushalttickets-Server verbinden",
+        "description": "Das Installationsskript hat das API-Token einmalig ausgegeben. Der Server nimmt Home Assistant nur an, wenn dessen Adresse in ALLOWED_CLIENTS steht.",
+        "data": {
+          "url": "Server-URL",
+          "api_token": "API-Token"
+        },
+        "data_description": {
+          "url": "Zum Beispiel http://192.168.1.20:8080",
+          "api_token": "Auf dem Server mit haushalttickets-ctl token create erzeugt"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Neues API-Token",
+        "description": "Der Server unter {url} hat das Token abgelehnt. Erzeuge auf dem Server ein neues und gib es hier ein.",
+        "data": {
+          "api_token": "API-Token"
+        }
+      },
+      "reconfigure": {
+        "title": "Server-URL ändern",
+        "data": {
+          "url": "Server-URL"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Der Server ist nicht erreichbar oder kein Haushalttickets-Server.",
+      "invalid_auth": "Der Server hat das API-Token abgelehnt.",
+      "client_not_allowed": "Der Server nimmt keine Verbindungen von diesem Home Assistant an. Trage dessen Adresse in /etc/haushalttickets/server.env unter ALLOWED_CLIENTS ein.",
+      "invalid_url": "Gib eine URL wie http://192.168.1.20:8080 ein.",
+      "unknown": "Unerwarteter Fehler, siehe Protokoll."
+    },
+    "abort": {
+      "single_instance_allowed": "Haushalttickets ist bereits eingerichtet.",
+      "reauth_successful": "Das neue Token funktioniert.",
+      "reconfigure_successful": "Die neue URL funktioniert."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "open": {
+        "name": "Offene Tickets"
+      },
+      "burning": {
+        "name": "Brennende Tickets"
+      },
+      "approval_pending": {
+        "name": "Freigaben ausstehend"
+      },
+      "acceptance": {
+        "name": "In Abnahme"
+      },
+      "assigned": {
+        "name": "{person} zugewiesen"
+      },
+      "to_accept": {
+        "name": "{person} abzunehmen"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_auth": {
+      "message": "Der Haushalttickets-Server hat das API-Token abgelehnt."
+    },
+    "cannot_connect": {
+      "message": "Der Haushalttickets-Server ist nicht erreichbar: {error}"
+    },
+    "update_failed": {
+      "message": "Aktualisierung vom Haushalttickets-Server fehlgeschlagen: {error}"
+    },
+    "not_loaded": {
+      "message": "Haushalttickets ist nicht eingerichtet oder nicht geladen."
+    },
+    "not_a_person": {
+      "message": "{entity_id} ist keine Person."
+    },
+    "person_without_user": {
+      "message": "{entity_id} ist mit keinem Home-Assistant-Benutzer verknüpft."
+    },
+    "forbidden": {
+      "message": "Nicht erlaubt ({code}): {detail}"
+    },
+    "not_found": {
+      "message": "Nicht gefunden: {detail}"
+    },
+    "rejected": {
+      "message": "Der Server hat die Anfrage abgelehnt ({code}): {detail}"
+    },
+    "reserved_fields": {
+      "message": "Diese Felder über die eigenen Optionen setzen, nicht über extra_fields: {fields}"
+    }
+  },
+  "selector": {
+    "ticket_type": {
+      "options": {
+        "repair": "Reparatur",
+        "purchase": "Anschaffung",
+        "home_assistant": "Home Assistant"
+      }
+    },
+    "urgency": {
+      "options": {
+        "someday": "Irgendwann",
+        "this_week": "Diese Woche",
+        "burning": "Brennt"
+      }
+    },
+    "status": {
+      "options": {
+        "new": "Neu",
+        "discussing": "In Klärung",
+        "in_progress": "In Arbeit",
+        "waiting_for_parts": "Wartet auf Teile",
+        "acceptance": "Abnahme",
+        "done": "Erledigt",
+        "rejected": "Abgelehnt"
+      }
+    },
+    "role": {
+      "options": {
+        "admin": "Admin",
+        "adult": "Erwachsen",
+        "child": "Kind",
+        "ai_agent": "KI-Agent"
+      }
+    }
+  },
+  "services": {
+    "create_ticket": {
+      "name": "Ticket anlegen",
+      "description": "Legt ein Ticket an. Von einer Person gestartet, gilt sie als Anfragende; von einer Automation gestartet, der Benutzer Automation.",
+      "fields": {
+        "type": {
+          "name": "Typ",
+          "description": "Art des Tickets."
+        },
+        "title": {
+          "name": "Titel",
+          "description": "Kurze Zusammenfassung."
+        },
+        "description": {
+          "name": "Beschreibung",
+          "description": "Details."
+        },
+        "urgency": {
+          "name": "Dringlichkeit",
+          "description": "Wie bald es erledigt sein muss."
+        },
+        "due_date": {
+          "name": "Fällig am",
+          "description": "Datum, bis zu dem es erledigt sein soll."
+        },
+        "assignees": {
+          "name": "Zuständige",
+          "description": "Zuständige Personen; jede muss mit einem Benutzer verknüpft sein."
+        },
+        "area_id": {
+          "name": "Bereich",
+          "description": "Betroffener Bereich (Reparaturen und Home-Assistant-Arbeit)."
+        },
+        "device_id": {
+          "name": "Gerät",
+          "description": "Betroffenes Gerät (Reparaturen und Home-Assistant-Arbeit)."
+        },
+        "extra_fields": {
+          "name": "Weitere Felder",
+          "description": "Weitere Ticketfelder der Server-API, etwa price_estimated oder vendor bei Anschaffungen."
+        }
+      }
+    },
+    "set_status": {
+      "name": "Status setzen",
+      "description": "Setzt ein Ticket in einen anderen Status.",
+      "fields": {
+        "ticket_id": {
+          "name": "Ticket",
+          "description": "Ticketnummer."
+        },
+        "status": {
+          "name": "Status",
+          "description": "Neuer Status."
+        }
+      }
+    },
+    "add_comment": {
+      "name": "Kommentar hinzufügen",
+      "description": "Fügt einem Ticket einen Kommentar hinzu.",
+      "fields": {
+        "ticket_id": {
+          "name": "Ticket",
+          "description": "Ticketnummer."
+        },
+        "comment": {
+          "name": "Kommentar",
+          "description": "Text des Kommentars."
+        }
+      }
+    },
+    "assign": {
+      "name": "Zuweisen",
+      "description": "Ersetzt die Zuständigen eines Tickets.",
+      "fields": {
+        "ticket_id": {
+          "name": "Ticket",
+          "description": "Ticketnummer."
+        },
+        "assignees": {
+          "name": "Zuständige",
+          "description": "Zuständige Personen; jede muss mit einem Benutzer verknüpft sein."
+        }
+      }
+    },
+    "set_role": {
+      "name": "Rolle setzen",
+      "description": "Setzt die Rolle eines Haushaltsmitglieds im Ticketsystem. Nur für Home-Assistant-Admins; der Server verlangt zusätzlich seine Admin-Rolle.",
+      "fields": {
+        "person": {
+          "name": "Person",
+          "description": "Mit dem Benutzer verknüpfte Person."
+        },
+        "role": {
+          "name": "Rolle",
+          "description": "Erwachsene geben Anschaffungen frei, Kinder dürfen nur anlegen und eigene Tickets abnehmen, der KI-Agent folgt den KI-Regeln."
+        }
+      }
+    }
+  }
+}

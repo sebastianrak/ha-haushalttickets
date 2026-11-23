@@ -1,0 +1,41 @@
+{
+  "entity": {
+    "sensor": {
+      "open": {
+        "default": "mdi:ticket-outline"
+      },
+      "burning": {
+        "default": "mdi:fire"
+      },
+      "approval_pending": {
+        "default": "mdi:cart-check"
+      },
+      "acceptance": {
+        "default": "mdi:clipboard-check-outline"
+      },
+      "assigned": {
+        "default": "mdi:account-wrench"
+      },
+      "to_accept": {
+        "default": "mdi:account-check"
+      }
+    }
+  },
+  "services": {
+    "create_ticket": {
+      "service": "mdi:ticket-confirmation-outline"
+    },
+    "set_status": {
+      "service": "mdi:list-status"
+    },
+    "add_comment": {
+      "service": "mdi:comment-text-outline"
+    },
+    "assign": {
+      "service": "mdi:account-arrow-right"
+    },
+    "set_role": {
+      "service": "mdi:account-key"
+    }
+  }
+}
