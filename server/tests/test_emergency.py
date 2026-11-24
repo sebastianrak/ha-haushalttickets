@@ -209,6 +209,23 @@ def test_lockout(app: FastAPI, eapp: FastAPI) -> None:
     assert "Abmelden" in client.post("/login", data={"password": PASSWORD}).text
 
 
+def test_browser_origin(app: FastAPI, eapp: FastAPI) -> None:
+    """Login works with the Origin headers real browsers send (regression 0.7.0).
+
+    With "Referrer-Policy: no-referrer" Chrome sent "Origin: null" and every login
+    ended in 403.
+    """
+    _set_password(app)
+    client = _client(eapp)
+    page = client.get("/login")
+    assert page.headers["referrer-policy"] == "same-origin"
+    for origin in ("https://testserver", "null"):
+        response = client.post(
+            "/login", data={"password": PASSWORD}, headers={"origin": origin}
+        )
+        assert "Abmelden" in response.text, origin
+
+
 def test_forged_requests(app: FastAPI, eapp: FastAPI) -> None:
     """Forms need the session's token and must come from the same origin."""
     _set_password(app)
