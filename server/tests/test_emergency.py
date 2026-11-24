@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import hashlib
 from pathlib import Path
 import re
 import shutil
+import socket
+import ssl
 import subprocess
+import threading
+import time
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
@@ -496,3 +501,60 @@ def test_self_signed_renewal_reloads(app: FastAPI, eapp: FastAPI) -> None:
     assert result is None and reloads == [1]
     with app.state.sessionmaker() as session:
         assert session.query(Ticket).count() == 0
+
+
+@needs_openssl
+def test_served_certificate_switches(
+    app: FastAPI, household: None, tmp_path: Path
+) -> None:
+    """After an upload the server presents the new certificate, not the old one.
+
+    Regression 0.7.1: an own RSA certificate was added next to the self-signed EC
+    one and browsers kept getting the self-signed one.
+    """
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    settings = Settings(
+        database_url=app.state.settings.database_url,
+        attachments_dir=tmp_path / "attachments",
+        emergency_clients="127.0.0.1",
+        emergency_port=port,
+        tls_dir=tmp_path / "tls",
+    )
+    server = emergency.make_server(settings, app.state.sessionmaker)
+    assert server is not None
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    def served() -> str:
+        client = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        client.check_hostname = False
+        client.verify_mode = ssl.CERT_NONE
+        for _ in range(50):
+            try:
+                with (
+                    socket.create_connection(("127.0.0.1", port), timeout=2) as raw,
+                    client.wrap_socket(raw) as tls_socket,
+                ):
+                    der = tls_socket.getpeercert(binary_form=True)
+                    break
+            except OSError:
+                time.sleep(0.1)
+        digest = hashlib.sha256(der).hexdigest().upper()
+        return ":".join(digest[i : i + 2] for i in range(0, len(digest), 2))
+
+    try:
+        assert served() == tls.active(settings.tls_dir).fingerprint  # self-signed
+        cert, key = _make_cert(tmp_path / "src")  # RSA
+        own = tls.import_custom(
+            settings.tls_dir, cert=cert.read_bytes(), key=key.read_bytes()
+        )
+        server.config_reload_certificate()
+        assert served() == own.fingerprint
+        tls.remove_custom(settings.tls_dir)
+        server.config_reload_certificate()
+        assert served() != own.fingerprint
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
