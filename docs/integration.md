@@ -142,6 +142,18 @@ data:
 
 Until then it is a ticket admin, because Home Assistant admins start as admins.
 
+## Card
+
+See [card.md](card.md). The integration serves it at
+`/haushalttickets_static/haushalttickets-card.js` and registers it with the frontend.
+
+## Files (for the card)
+
+- `GET /api/haushalttickets/attachments/<id>` and `…/<id>/thumbnail` (JPEG, at most
+  480 px) stream attachments from the server as the logged-in user.
+- `POST /api/haushalttickets/tickets/<id>/attachments` (multipart `file`, `kind`:
+  `photo`, `invoice` or `document`) uploads; Home Assistant accepts up to 16 MiB.
+
 ## WebSocket API (for the card)
 
 - `haushalttickets/request` with `method`, `path` (below `/api/v1/`), optional

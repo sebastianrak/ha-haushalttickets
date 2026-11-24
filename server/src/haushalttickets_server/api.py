@@ -139,8 +139,16 @@ def get_actor(
 ActorDep = Annotated[Actor, Depends(get_actor)]
 
 
-def _ticket_out(ticket) -> TicketOut:
-    return TicketOut.model_validate(ticket)
+def _tickets_out(session: Session, tickets: list) -> list[TicketOut]:
+    stats = services.ticket_stats(session, [t.id for t in tickets])
+    return [
+        TicketOut.model_validate(t).model_copy(update=vars(stats[t.id]))
+        for t in tickets
+    ]
+
+
+def _ticket_out(session: Session, ticket) -> TicketOut:
+    return _tickets_out(session, [ticket])[0]
 
 
 # Users
@@ -226,7 +234,7 @@ def list_tickets(
         limit=limit,
         offset=offset,
     )
-    return TicketList(count=total, tickets=[_ticket_out(t) for t in tickets])
+    return TicketList(count=total, tickets=_tickets_out(session, tickets))
 
 
 @router.post("/tickets", status_code=status.HTTP_201_CREATED)
@@ -236,13 +244,13 @@ def create_ticket(
     """Create a ticket."""
     ticket = services.create_ticket(session, actor, body)
     session.commit()
-    return _ticket_out(ticket)
+    return _ticket_out(session, ticket)
 
 
 @router.get("/tickets/{ticket_id}")
 def get_ticket(session: SessionDep, actor: ActorDep, ticket_id: int) -> TicketOut:
     """One ticket."""
-    return _ticket_out(services.get_ticket(session, ticket_id))
+    return _ticket_out(session, services.get_ticket(session, ticket_id))
 
 
 @router.patch("/tickets/{ticket_id}")
@@ -254,7 +262,7 @@ def patch_ticket(
         session, actor, services.get_ticket(session, ticket_id), body
     )
     session.commit()
-    return _ticket_out(ticket)
+    return _ticket_out(session, ticket)
 
 
 @router.delete("/tickets/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -278,7 +286,7 @@ def change_status(
         session, actor, services.get_ticket(session, ticket_id), body.status
     )
     session.commit()
-    return _ticket_out(ticket)
+    return _ticket_out(session, ticket)
 
 
 @router.put("/tickets/{ticket_id}/assignees")
@@ -290,7 +298,7 @@ def put_assignees(
         session, actor, services.get_ticket(session, ticket_id), body.user_ids
     )
     session.commit()
-    return _ticket_out(ticket)
+    return _ticket_out(session, ticket)
 
 
 @router.post("/tickets/{ticket_id}/approval")
@@ -305,7 +313,7 @@ def decide_approval(
         body.decision == "approve",
     )
     session.commit()
-    return _ticket_out(ticket)
+    return _ticket_out(session, ticket)
 
 
 @router.post("/tickets/{ticket_id}/ai-flags")
@@ -321,7 +329,7 @@ def set_ai_flags(
         body.implement_approved,
     )
     session.commit()
-    return _ticket_out(ticket)
+    return _ticket_out(session, ticket)
 
 
 # Comments
@@ -473,6 +481,7 @@ def upload_attachment(
         with contextlib.suppress(OSError):
             Path(attachment.storage_path).unlink()
         raise
+    services.make_thumbnail(attachment)
     return AttachmentOut.model_validate(attachment)
 
 
@@ -487,6 +496,21 @@ def download_attachment(
         media_type=attachment.content_type,
         filename=attachment.filename,
     )
+
+
+@router.get("/attachments/{attachment_id}/thumbnail", response_class=FileResponse)
+def attachment_thumbnail(
+    session: SessionDep, actor: ActorDep, attachment_id: str
+) -> FileResponse:
+    """JPEG preview (at most 480 px) of an image attachment."""
+    attachment = services.get_attachment(session, attachment_id)
+    path = services.make_thumbnail(attachment)
+    if path is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "no_thumbnail", "detail": "No preview for this file."},
+        )
+    return FileResponse(path, media_type="image/jpeg")
 
 
 @router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)

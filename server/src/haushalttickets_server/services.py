@@ -3,14 +3,17 @@ an event in the same transaction."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 import hashlib
+import logging
 from pathlib import Path
 import secrets
 from typing import Any
 import uuid
 
+from PIL import Image, ImageOps
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -43,6 +46,8 @@ from .schemas import (
     TicketFields,
     UserSyncItem,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 DEFAULT_APPROVAL_THRESHOLD = Decimal("250.00")
 SETTING_APPROVAL_THRESHOLD = "purchase_approval_threshold"
@@ -637,6 +642,81 @@ def list_history(session: Session, ticket: Ticket) -> list[HistoryEntry]:
 # Attachments
 
 
+THUMBNAIL_SIZE = (480, 480)
+
+
+def thumbnail_path(attachment: Attachment) -> Path:
+    """Where the preview of an image attachment lives."""
+    return Path(attachment.storage_path + ".thumb.jpg")
+
+
+def make_thumbnail(attachment: Attachment) -> Path | None:
+    """Create the JPEG preview of an image; None if it is no readable image."""
+    if not attachment.content_type.startswith("image/"):
+        return None
+    target = thumbnail_path(attachment)
+    if target.exists():
+        return target
+    try:
+        with Image.open(attachment.storage_path) as image:
+            image = ImageOps.exif_transpose(image)
+            image.thumbnail(THUMBNAIL_SIZE)
+            image.convert("RGB").save(target, "JPEG", quality=80, optimize=True)
+    except (OSError, ValueError, Image.DecompressionBombError):
+        _LOGGER.warning("No thumbnail for attachment %s", attachment.id)
+        target.unlink(missing_ok=True)
+        return None
+    return target
+
+
+@dataclass(frozen=True)
+class TicketStats:
+    """Counts shown on a ticket tile."""
+
+    comment_count: int = 0
+    attachment_count: int = 0
+    cover_attachment_id: str | None = None
+
+
+def ticket_stats(session: Session, ticket_ids: list[int]) -> dict[int, TicketStats]:
+    """Comment and attachment counts and the first photo per ticket."""
+    if not ticket_ids:
+        return {}
+    comments = dict(
+        session.execute(
+            select(Comment.ticket_id, func.count())
+            .where(Comment.ticket_id.in_(ticket_ids))
+            .group_by(Comment.ticket_id)
+        ).all()
+    )
+    attachments = dict(
+        session.execute(
+            select(Attachment.ticket_id, func.count())
+            .where(Attachment.ticket_id.in_(ticket_ids))
+            .group_by(Attachment.ticket_id)
+        ).all()
+    )
+    covers: dict[int, str] = {}
+    for ticket_id, attachment_id in session.execute(
+        select(Attachment.ticket_id, Attachment.id)
+        .where(
+            Attachment.ticket_id.in_(ticket_ids),
+            Attachment.kind == AttachmentKind.PHOTO,
+            Attachment.content_type.like("image/%"),
+        )
+        .order_by(Attachment.ticket_id, Attachment.created_at)
+    ):
+        covers.setdefault(ticket_id, attachment_id)
+    return {
+        ticket_id: TicketStats(
+            comment_count=comments.get(ticket_id, 0),
+            attachment_count=attachments.get(ticket_id, 0),
+            cover_attachment_id=covers.get(ticket_id),
+        )
+        for ticket_id in ticket_ids
+    }
+
+
 def add_attachment(
     session: Session,
     actor: Actor,
@@ -706,6 +786,7 @@ def delete_attachment(session: Session, actor: Actor, attachment: Attachment) ->
     ticket = get_ticket(session, attachment.ticket_id)
     record(session, actor, ticket, "attachment_removed", attachment.filename, None)
     session.delete(attachment)
+    thumbnail_path(attachment).unlink(missing_ok=True)
     return Path(attachment.storage_path)
 
 

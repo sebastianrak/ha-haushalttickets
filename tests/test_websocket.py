@@ -47,6 +47,20 @@ async def test_request_as_logged_in_user(
     )
     response = await client.receive_json()
     assert response["result"]["count"] == 1
+    assert response["result"]["tickets"][0]["comment_count"] == 0
+
+    # Several statuses at once, as the card asks for the archive.
+    await client.send_json_auto_id(
+        {
+            "type": "haushalttickets/request",
+            "method": "GET",
+            "path": "/api/v1/tickets",
+            "params": {"status": ["done", "rejected"]},
+        }
+    )
+    response = await client.receive_json()
+    assert response["success"], response
+    assert response["result"]["count"] == 0
 
 
 async def test_server_rules_and_blocked_paths(
