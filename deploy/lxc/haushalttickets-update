@@ -7,8 +7,13 @@
 #   haushalttickets-update --source DIR       # a local checkout
 #
 # Release assets are verified against SHA256SUMS, dependencies against the hashes in
-# requirements.txt. The database is dumped before migrating.
+# requirements.txt. The database is dumped before migrating. The admin tools in
+# /usr/local/sbin (this script included) are updated from the same version.
 set -euo pipefail
+# `pct enter` passes the Proxmox host's locale (e.g. en_US.UTF-8), which the container
+# does not have; C.UTF-8 always exists.
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+unset LANGUAGE
 
 REPO="sebastianrak/ha-haushalttickets"
 VENV="/opt/haushalttickets/venv"
@@ -16,6 +21,9 @@ ENV_FILE="/etc/haushalttickets/server.env"
 MODE="release"
 TARGET="latest"
 RESTART=1
+TOOLS=(haushalttickets-update haushalttickets-backup haushalttickets-ctl)
+TOOLS_DIR=""
+TOOLS_SUMS=""   # release mode: install only tools whose checksum was verified
 
 die() { echo "Error: $*" >&2; exit 1; }
 have_systemd() { [[ -d /run/systemd/system ]]; }
@@ -58,7 +66,10 @@ case "$MODE" in
 import json, sys
 for asset in json.load(open(sys.argv[1]))["assets"]:
     name = asset["name"]
-    if name.endswith(".whl") or name in ("requirements.txt", "SHA256SUMS"):
+    if name.endswith(".whl") or name in (
+        "requirements.txt", "SHA256SUMS",
+        "haushalttickets-update", "haushalttickets-backup", "haushalttickets-ctl",
+    ):
         print(name, asset["browser_download_url"])
 EOF
     while read -r name url; do
@@ -69,17 +80,40 @@ EOF
     REQUIREMENTS="$WORK/requirements.txt"
     PACKAGE=$(find "$WORK" -maxdepth 1 -name 'haushalttickets_server-*.whl' | head -n1)
     [[ -n $PACKAGE ]] || die "release has no server wheel"
+    TOOLS_DIR="$WORK"   # releases before v0.3.1 carry no tools; install_tools skips them
+    TOOLS_SUMS="$WORK/SHA256SUMS"
     ;;
   ref)
     git clone --quiet --depth 1 --branch "$TARGET" "https://github.com/$REPO" "$WORK/src"
     REQUIREMENTS="$WORK/src/server/requirements.txt"
     PACKAGE="$WORK/src/server"
+    TOOLS_DIR="$WORK/src/deploy/lxc"
     ;;
   source)
     REQUIREMENTS="$TARGET/server/requirements.txt"
     PACKAGE="$TARGET/server"
+    TOOLS_DIR="$TARGET/deploy/lxc"
     ;;
 esac
+
+# Replace the tools by renaming new files over them: bash keeps reading this running
+# script from the old file, so updating it mid-run is safe.
+install_tools() {
+  local tool tmp
+  for tool in "${TOOLS[@]}"; do
+    if [[ ! -f $TOOLS_DIR/$tool ]] \
+      || { [[ -n $TOOLS_SUMS ]] && ! grep -qE "^[0-9a-f]{64}  $tool\$" "$TOOLS_SUMS"; }; then
+      echo "==> Tools: not part of this version, left unchanged"
+      return 0
+    fi
+  done
+  echo "==> Tools"
+  for tool in "${TOOLS[@]}"; do
+    tmp=$(mktemp "/usr/local/sbin/.$tool.XXXXXX")
+    install -m 0755 "$TOOLS_DIR/$tool" "$tmp"
+    mv -f "$tmp" "/usr/local/sbin/$tool"
+  done
+}
 
 if [[ $CURRENT != none ]]; then
   echo "==> Database dump before update"
@@ -93,6 +127,8 @@ NEW=$(version)
 
 echo "==> Migrating database"
 /usr/local/sbin/haushalttickets-ctl migrate
+
+install_tools
 
 if [[ $RESTART -eq 1 ]] && have_systemd && systemctl is-enabled --quiet haushalttickets 2>/dev/null; then
   systemctl restart haushalttickets

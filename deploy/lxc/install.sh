@@ -118,6 +118,14 @@ if ! grep -q '# haushalttickets: PATH' /root/.bashrc 2>/dev/null; then
 case ":$PATH:" in *:/usr/local/sbin:*) ;; *) PATH="/usr/local/sbin:/usr/local/bin:$PATH" ;; esac
 BASHRC
 fi
+# `pct enter` also passes the host's locale, which the container does not have (Perl
+# tools such as pg_dump then warn "Setting locale failed").
+if ! grep -q "# haushalttickets: the Proxmox host's locale" /root/.bashrc 2>/dev/null; then
+  cat >>/root/.bashrc <<'BASHRC'
+# haushalttickets: the Proxmox host's locale (e.g. en_US.UTF-8) does not exist here
+export LANG=C.UTF-8
+BASHRC
+fi
 
 echo "==> Server"
 /usr/local/sbin/haushalttickets-update --source "$SRC_DIR" --no-restart

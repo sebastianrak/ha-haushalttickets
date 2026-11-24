@@ -3,5 +3,9 @@
 #   haushalttickets-ctl migrate
 #   haushalttickets-ctl token create homeassistant
 set -euo pipefail
+# `pct enter` passes the Proxmox host's locale (e.g. en_US.UTF-8), which the container
+# does not have; C.UTF-8 always exists.
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+unset LANGUAGE
 cd /var/lib/haushalttickets
 exec runuser -u haushalttickets -- /opt/haushalttickets/venv/bin/haushalttickets-server "$@"

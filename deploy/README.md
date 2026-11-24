@@ -65,6 +65,23 @@ runs the migrations, restarts the service and checks `/api/health`.
 Without `--release` it installs GitHub's *latest* release, which never is a
 pre-release: install a pre-release with `--release v<version>`.
 
+From v0.3.1 on it also replaces the admin tools in `/usr/local/sbin`
+(`haushalttickets-update`, `-backup`, `-ctl`) with the ones of the installed version;
+in release mode only tools listed in the release's `SHA256SUMS`. Releases before
+v0.3.1 carry no tools, so the tools stay as they are when you go back to one.
+
+Updating from v0.3.0 the first time: the v0.3.0 update script does not know about
+the tools yet. Fetch the new one once, check it, then update as usual:
+
+```bash
+cd /tmp
+base=https://github.com/sebastianrak/ha-haushalttickets/releases/download/v0.3.1
+curl -fsSLO "$base/SHA256SUMS" && curl -fsSLO "$base/haushalttickets-update"
+grep ' haushalttickets-update$' SHA256SUMS | sha256sum --check
+install -m 0755 haushalttickets-update /usr/local/sbin/haushalttickets-update
+haushalttickets-update
+```
+
 ## Publishing a release
 
 Push a tag (`git tag v0.4.0 && git push origin v0.4.0`) or create the release in the
