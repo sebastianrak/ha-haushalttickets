@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Comma-separated addresses or networks allowed to call the API, e.g.
     # "172.16.1.10,127.0.0.1". Empty allows every client (the token still applies).
     allowed_clients: str = ""
+    # Recurring tickets: local days are counted in this time zone, and the server
+    # looks for rounds to create every so many minutes (0 = only on changes).
+    timezone: str = "Europe/Berlin"
+    recurrence_minutes: int = 15
 
     @field_validator("allowed_clients")
     @classmethod

@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 from .enums import (
     ApprovalState,
     AttachmentKind,
+    IntervalUnit,
+    RecurrenceMode,
     Role,
     Status,
     TicketType,
@@ -191,6 +193,100 @@ class TicketOut(_Out):
 class TicketList(BaseModel):
     count: int
     tickets: list[TicketOut]
+
+
+# Recurring series
+
+# Type-specific fields a series copies into every round (planned values only).
+SERIES_TYPE_FIELDS = (
+    "ha_targets",
+    "price_estimated",
+    "product_url",
+    "vendor",
+    "contractor_name",
+    "contractor_phone",
+    "cost_estimated",
+)
+ChecklistText = Annotated[str, Field(min_length=1, max_length=500)]
+
+
+class SeriesTypeFields(_In):
+    ha_targets: list[Annotated[str, Field(max_length=255)]] | None = None
+    price_estimated: Amount | None = None
+    product_url: HttpUrl | None = None
+    vendor: Annotated[str, Field(max_length=200)] | None = None
+    contractor_name: Annotated[str, Field(max_length=200)] | None = None
+    contractor_phone: Annotated[str, Field(max_length=50)] | None = None
+    cost_estimated: Amount | None = None
+
+
+class SeriesTemplate(_In):
+    """What every round gets; only the fields that are sent are changed."""
+
+    title: Title | None = None
+    description: Annotated[str, Field(max_length=20000)] | None = None
+    urgency: Urgency | None = None
+    importance: Importance | None = None
+    assignee_ids: list[str] | None = None
+    ha_area_id: Annotated[str, Field(max_length=255)] | None = None
+    ha_device_id: Annotated[str, Field(max_length=255)] | None = None
+    checklist: Annotated[list[ChecklistText], Field(max_length=50)] | None = None
+    fields: SeriesTypeFields | None = None
+
+
+class SeriesRule(_In):
+    mode: RecurrenceMode | None = None
+    interval_count: Annotated[int, Field(ge=1, le=999)] | None = None
+    interval_unit: IntervalUnit | None = None
+    lead_days: Annotated[int, Field(ge=0, le=365)] | None = None
+
+
+class SeriesCreate(SeriesTemplate, SeriesRule):
+    """A new series, either from an existing ticket (its first round) or blank."""
+
+    from_ticket_id: int | None = None
+    type: TicketType | None = None
+    requested_by_id: str | None = None
+    # Due date of the first round (blank series) or calendar start (fixed_calendar).
+    first_due: date | None = None
+    mode: RecurrenceMode
+    interval_count: Annotated[int, Field(ge=1, le=999)]
+    interval_unit: IntervalUnit
+
+
+class SeriesPatch(SeriesTemplate, SeriesRule):
+    """Change a series; affects future rounds only."""
+
+    next_due: date | None = None
+    active: bool | None = None
+
+
+class SeriesOut(_Out):
+    id: int
+    type: TicketType
+    title: str
+    description: str
+    urgency: Urgency
+    importance: int | None
+    requested_by_id: str
+    assignee_ids: list[str]
+    ha_area_id: str | None
+    ha_device_id: str | None
+    checklist: list[str]
+    fields: dict[str, Any]
+    mode: RecurrenceMode
+    interval_count: int
+    interval_unit: IntervalUnit
+    lead_days: int
+    next_due: date | None
+    anchor: date | None
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+    # Filled in by the API.
+    open_ticket_id: int | None = None
+    appears_on: date | None = None
+    round_count: int = 0
 
 
 # Comments, checklist, history, attachments

@@ -40,6 +40,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "rejected": "Träum weiter",
         "comment": "Neuer Kommentar",
         "due": "Fällige Tickets",
+        "recurring": "Wiederkehrend",
+        "due_on": "fällig am {date}",
         "by": "von {name}",
         "via_ai": "{name} über KI",
         "also_assigned": "Dir zugewiesen.",
@@ -60,6 +62,8 @@ TEXTS: dict[str, dict[str, str]] = {
         "rejected": "Dream on",
         "comment": "New comment",
         "due": "Tickets due",
+        "recurring": "Recurring",
+        "due_on": "due {date}",
         "by": "by {name}",
         "via_ai": "{name} via AI",
         "also_assigned": "Assigned to you.",
@@ -182,7 +186,22 @@ def notifications_for(
 
     build = _Builder(data, texts, actor_id)
     kind = event.get("type")
-    if kind == "ticket_created":
+    if kind == "ticket_created" and event.get("via") == "recurrence":
+        # A new round of a series: nobody did anything, so say when it is due.
+        due = ticket.get("due_date") or payload.get("due_date")
+        message = f"#{ticket_id} {title}"
+        if due:
+            shown = date.fromisoformat(due)
+            day = (
+                shown.strftime("%d.%m.%Y")
+                if language.startswith("de")
+                else shown.isoformat()
+            )
+            message = f"{message} {_DASH} {texts['due_on'].format(date=day)}"
+        if burning:
+            build.add(build.adults(), "burning", message, ticket_id, urgent=True)
+        build.add(assignees or [requester], "recurring", message, ticket_id)
+    elif kind == "ticket_created":
         if burning:
             for user_id in build.adults():
                 assigned = user_id in assignees

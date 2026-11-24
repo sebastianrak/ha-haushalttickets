@@ -16,7 +16,7 @@
  *
  * MIT-Lizenz
  */
-const HT_VERSION = "0.5.0";
+const HT_VERSION = "0.6.0";
 
 const HT_TEXTE = {
   de: {
@@ -42,6 +42,14 @@ const HT_TEXTE = {
     keinZugriff: "Haushalttickets ist nicht erreichbar.", laedt: "Lädt …", angelegt: "angelegt", statusAuf: "Status →",
     geaendert: "geändert", entfernen: "Entfernen?", fotosNachher: "Fotos", via_ai: "über KI",
     liest: "Liest …", nichtLesbar: "Datei nicht lesbar", hochladenFehler: "Hochladen fehlgeschlagen",
+    wdh: "Wiederholen", serien: "Wiederkehrend", rhythmus: "Rhythmus", vorlauf: "Vorlauf (Tage)",
+    jede: { days: "jeden Tag", weeks: "jede Woche", months: "jeden Monat", years: "jedes Jahr" },
+    einheit: { days: "Tage", weeks: "Wochen", months: "Monate", years: "Jahre" }, alleN: "alle %n %e",
+    modus: { after_completion: "ab Erledigung", fixed_calendar: "fester Kalender" },
+    faelligAm: "nächste Runde fällig %d", erscheint: "erscheint %d", offen: "offen", pausiert: "pausiert",
+    pausieren: "Pausieren", fortsetzen: "Fortsetzen", beenden: "Beenden", beendenFrage: "Wirklich beenden?",
+    aendern: "Ändern", abbrechen: "Abbrechen", naechsteRunde: "Nächste Runde fällig", geplant: "Geplant – erscheint am %d",
+    keineSerien: "Noch nichts Wiederkehrendes. Im Ticket „Wiederholen“ anhaken.",
     felder: {
       title: "Titel", description: "Beschreibung", urgency: "Dringlichkeit", importance: "Herzen", due_date: "Fälligkeit",
       ha_area_id: "Bereich", ha_device_id: "Gerät", ha_targets: "Entitäten", price_estimated: "Preis geschätzt",
@@ -52,8 +60,14 @@ const HT_TEXTE = {
       checklist_added: "Checkliste +", checklist_removed: "Checkliste −", checklist_text: "Checkliste",
       checklist_done: "Checkliste ✓", attachment_added: "Anhang +", attachment_removed: "Anhang −",
       ai_draft_requested: "KI-Entwurf", ai_implement_approved: "KI-Umsetzung", admin_override: "Admin-Abnahme",
+      series_id: "Wiederholung",
     },
     fehler: {
+      ai_series_forbidden: "Wiederkehrende Tickets legt die KI nicht an.",
+      series_forbidden: "Kinder verwalten nur ihre eigenen wiederkehrenden Tickets.",
+      already_in_series: "Dieses Ticket wiederholt sich schon.",
+      first_due_required: "Dafür braucht es ein Fälligkeitsdatum.",
+      requester_forbidden: "Tickets für andere legen nur Erwachsene an.",
       acceptance_by_requester: "Abnehmen darf nur, wer das Ticket gewünscht hat.",
       approval_pending: "Die Anschaffung braucht erst die Freigabe der zweiten erwachsenen Person.",
       approval_by_other_adult: "Freigeben muss die andere erwachsene Person.",
@@ -92,6 +106,14 @@ const HT_TEXTE = {
     keinZugriff: "Haushalttickets cannot be reached.", laedt: "Loading …", angelegt: "created", statusAuf: "Status →",
     geaendert: "changed", entfernen: "Remove?", fotosNachher: "Photos", via_ai: "via AI",
     liest: "Reading …", nichtLesbar: "File not readable", hochladenFehler: "Upload failed",
+    wdh: "Repeat", serien: "Recurring", rhythmus: "Rhythm", vorlauf: "Lead time (days)",
+    jede: { days: "every day", weeks: "every week", months: "every month", years: "every year" },
+    einheit: { days: "days", weeks: "weeks", months: "months", years: "years" }, alleN: "every %n %e",
+    modus: { after_completion: "after completion", fixed_calendar: "fixed calendar" },
+    faelligAm: "next round due %d", erscheint: "appears %d", offen: "open", pausiert: "paused",
+    pausieren: "Pause", fortsetzen: "Resume", beenden: "End", beendenFrage: "Really end?",
+    aendern: "Edit", abbrechen: "Cancel", naechsteRunde: "Next round due", geplant: "Planned – appears on %d",
+    keineSerien: "Nothing recurring yet. Tick “Repeat” in a ticket.",
     felder: {
       title: "Title", description: "Description", urgency: "Urgency", importance: "Hearts", due_date: "Due date",
       ha_area_id: "Area", ha_device_id: "Device", ha_targets: "Entities", price_estimated: "Estimated price",
@@ -102,6 +124,7 @@ const HT_TEXTE = {
       checklist_added: "Checklist +", checklist_removed: "Checklist −", checklist_text: "Checklist",
       checklist_done: "Checklist ✓", attachment_added: "Attachment +", attachment_removed: "Attachment −",
       ai_draft_requested: "AI draft", ai_implement_approved: "AI implementation", admin_override: "Admin acceptance",
+      series_id: "Repeat",
     },
     fehler: {},
   },
@@ -131,6 +154,10 @@ const HT_TYPFELDER = {
   home_assistant: ["ha_area_id", "ha_targets"],
 };
 const HT_BILDER = new Map(); // Anhang-ID → Promise<Objekt-URL>, über alle Karten hinweg
+// Wiederkehrende Tickets: Einheiten und Felder, die eine Serie in jede Runde übernimmt
+const HT_EINHEITEN = ["days", "weeks", "months", "years"];
+const HT_SERIENFELDER = ["ha_targets", "price_estimated", "product_url", "vendor", "contractor_name", "contractor_phone", "cost_estimated"];
+const HT_REGEL = { interval_count: 1, interval_unit: "months", mode: "after_completion", lead_days: 7 };
 
 function htEsc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -211,11 +238,13 @@ class HaushaltticketsCard extends HTMLElement {
     if (this._laedt) { this._nochmal = true; return; }
     this._laedt = true;
     try {
-      const [users, offen, zu] = await Promise.all([
+      const [users, offen, zu, serien] = await Promise.all([
         this._ws("GET", "/api/v1/users"),
         this._ws("GET", "/api/v1/tickets", { params: { include_closed: false, limit: 500 } }),
         this._ws("GET", "/api/v1/tickets", { params: { status: HT_GESCHLOSSEN, limit: 200 } }),
+        this._ws("GET", "/api/v1/series").catch(() => []),   // Server vor 0.6.0 kennt keine Serien
       ]);
+      this._serien = Array.isArray(serien) ? serien : [];
       const vorher = Object.keys(this._users).length;
       this._users = Object.fromEntries(users.map((u) => [u.ha_user_id, u]));
       this._offen = offen.tickets;
@@ -224,6 +253,7 @@ class HaushaltticketsCard extends HTMLElement {
       this._geladen = true;
       if (!vorher) this._kopf(); else this._board();
       if (this._spaeter) { const id = this._spaeter; this._spaeter = null; this._oeffnen(id); }
+      if (this._serienAuf) this._serienZeichnen();
     } catch (e) {
       this._fehler(this._t.keinZugriff + " (" + (e.message || e.code || e) + ")");
     } finally {
@@ -315,6 +345,7 @@ class HaushaltticketsCard extends HTMLElement {
         <div class="filter">${chips.map(([k, n, u]) => `<button class="chip ${this._filter === k ? "an" : ""}" data-f="${htEsc(k)}">${u ? this._avatar(u, 20) : ""}${htEsc(n)}</button>`).join("")}</div>
         <div class="filter typen">${typen.map(([k, n, i]) => `<button class="chip ${this._typ === k ? "an" : ""}" data-y="${htEsc(k)}" title="${htEsc(n)}">${i ? `<ha-icon icon="${i}"></ha-icon>` : ""}<span>${htEsc(n)}</span></button>`).join("")}</div>
         <input class="suche" type="search" placeholder="${htEsc(t.suche)}" value="${htEsc(this._suche)}">
+        <button class="chip wdhk" title="${htEsc(t.serien)}"><ha-icon icon="mdi:calendar-sync"></ha-icon><span>${htEsc(t.serien)}</span><b></b></button>
         <button class="plus" title="${htEsc(t.neu)}"><ha-icon icon="mdi:plus"></ha-icon><span>${htEsc(t.neu)}</span></button>
       </div>`;
     kopf.querySelectorAll(".chip[data-f]").forEach((b) => b.addEventListener("click", () => {
@@ -329,6 +360,7 @@ class HaushaltticketsCard extends HTMLElement {
     }));
     kopf.querySelector(".suche").addEventListener("input", (e) => { this._suche = e.target.value; this._board(); });
     kopf.querySelector(".plus").addEventListener("click", () => this._oeffnen(null));
+    kopf.querySelector(".wdhk").addEventListener("click", () => this._serienOeffnen());
     this._board();
   }
 
@@ -352,6 +384,8 @@ class HaushaltticketsCard extends HTMLElement {
     const items = alle.filter((i) => this._sichtbar(i));
     const zahl = this.shadowRoot.querySelector(".kopf .zahl");
     if (zahl) zahl.textContent = this._offen.length ? String(this._offen.length) : "";
+    const wz = this.shadowRoot.querySelector(".kopf .wdhk b");
+    if (wz) wz.textContent = (this._serien || []).length ? String(this._serien.length) : "";
     // iPhone: Reiterleiste, eine Spalte zur Zeit (p3)
     if (!HT_SPALTEN.some((sp) => sp.key === this._spalte)) this._spalte = "new";
     const anzahl = (key) => items.filter((i) => htSpalte(i.status) === key).length;
@@ -401,6 +435,7 @@ class HaushaltticketsCard extends HTMLElement {
         ${i.importance ? `<span class="herz">${"♥".repeat(i.importance)}</span>` : ""}
         ${i.comment_count ? `<span class="kom"><ha-icon icon="mdi:comment-outline"></ha-icon>${i.comment_count}</span>` : ""}
         ${i.attachment_count ? `<span class="kom"><ha-icon icon="mdi:paperclip"></ha-icon>${i.attachment_count}</span>` : ""}
+        ${i.series_id ? `<span class="kom" title="${htEsc(t.serien)}"><ha-icon icon="mdi:repeat"></ha-icon></span>` : ""}
         ${abnahme}
       </div>
     </article>`;
@@ -481,7 +516,7 @@ class HaushaltticketsCard extends HTMLElement {
     const ueber = this._portal();
     this._dialog = { id: neu ? null : id };
     if (neu) {
-      this._dialog.w = { type: this._typ !== "alle" ? this._typ : "repair", title: "", description: "", urgency: "someday", importance: null, due_date: null, assignee_ids: [], felder: {}, dateien: [] };
+      this._dialog.w = { type: this._typ !== "alle" ? this._typ : "repair", title: "", description: "", urgency: "someday", importance: null, due_date: null, assignee_ids: [], felder: {}, dateien: [], wdh: false, regel: { ...HT_REGEL } };
       this._dialogZeichnen(ueber);
       return;
     }
@@ -507,6 +542,7 @@ class HaushaltticketsCard extends HTMLElement {
         urgency: ticket.urgency, importance: ticket.importance, due_date: ticket.due_date, assignee_ids: [...ticket.assignee_ids],
         ai_draft_requested: ticket.ai_draft_requested, ai_implement_approved: ticket.ai_implement_approved,
         felder: Object.fromEntries((HT_TYPFELDER[ticket.type] || []).map((f) => [f, ticket[f]])),
+        wdh: false, regel: { ...HT_REGEL },
       };
       this._dialogZeichnen(this._portal());
       return true;
@@ -580,6 +616,7 @@ class HaushaltticketsCard extends HTMLElement {
           <input class="datum" type="date" value="${htEsc(w.due_date || "")}"></div>
         <div><label>${htEsc(t.herz)}</label><div class="herzen">${[1, 2, 3, 4, 5].map((h) => `<button data-v="${h}" class="${h <= (w.importance || 0) ? "an" : ""}">♥</button>`).join("")}</div></div>
       </div>
+      ${this._wdhBox(d)}
       <details class="mehrfelder" ${neu ? "" : "open"}><summary>${htEsc(t.details)}</summary><div class="typfelder">${this._typfelder(w)}</div></details>
       ${erwachsen && !neu ? `<label>${htEsc(t.ki)}</label><div class="kiflags">
         <label class="haken"><input type="checkbox" class="kd" ${w.ai_draft_requested ? "checked" : ""}>${htEsc(t.kiEntwurf)}</label>
@@ -637,6 +674,11 @@ class HaushaltticketsCard extends HTMLElement {
       const v = Number(b.dataset.v); w.importance = w.importance === v ? null : v;
       d.querySelectorAll(".herzen button").forEach((x) => x.classList.toggle("an", Number(x.dataset.v) <= (w.importance || 0)));
     }));
+    const wdhan = d.querySelector(".wdhan");
+    if (wdhan) wdhan.addEventListener("change", () => { w.wdh = wdhan.checked; d.querySelector(".wdhregel").classList.toggle("aus", !w.wdh); });
+    this._regelVerdrahten(d.querySelector(".wdhregel"), w.regel);
+    const wdhv = d.querySelector(".wdhv");
+    if (wdhv) wdhv.addEventListener("click", () => this._serienOeffnen());
     d.querySelectorAll(".fg").forEach((b) => b.addEventListener("click", async () => {
       if (await this._aktion(() => this._ws("POST", `/api/v1/tickets/${this._dialog.id}/approval`, { body: { decision: b.dataset.d } }))) {
         this._dialog.w = null; await this._dialogNachladen(); this._laden();
@@ -665,6 +707,7 @@ class HaushaltticketsCard extends HTMLElement {
       w.description = d.querySelector(".dtext").value;
       if (!w.title) { d.querySelector(".dtitel").focus(); return; }
       this._felderLesen(d, w);
+      this._regelLesen(d.querySelector(".wdhregel"), w.regel);
       ok.disabled = true;
       const fertig = neu ? await this._anlegen(w) : await this._speichern(w);
       ok.disabled = false;
@@ -707,6 +750,8 @@ class HaushaltticketsCard extends HTMLElement {
   }
 
   async _anlegen(w) {
+    // Wiederkehrend und noch weit hin: nur die Serie planen, die erste Runde erscheint mit Vorlauf
+    if (w.wdh && w.due_date && !w.dateien.length && this._tageBis(w.due_date) > w.regel.lead_days) return this._serieGeplant(w);
     const body = { type: w.type, title: w.title, urgency: w.urgency };
     if (w.description.trim()) body.description = w.description;
     if (w.importance) body.importance = w.importance;
@@ -719,6 +764,7 @@ class HaushaltticketsCard extends HTMLElement {
     if (!(await this._aktion(async () => { ticket = await this._ws("POST", "/api/v1/tickets", { body }); }))) return false;
     await w.einlesen;
     for (const datei of w.dateien) await this._hochladen(ticket.id, datei, null);
+    if (w.wdh) await this._aktion(() => this._ws("POST", "/api/v1/series", { body: { from_ticket_id: ticket.id, ...w.regel } }));
     return true;
   }
 
@@ -742,7 +788,177 @@ class HaushaltticketsCard extends HTMLElement {
     if (w.type === "home_assistant" && w.ai_implement_approved !== tk.ai_implement_approved) flags.implement_approved = w.ai_implement_approved;
     if (Object.keys(flags).length && !(await this._aktion(() => this._ws("POST", base + "/ai-flags", { body: flags })))) return false;
     if (w.status && w.status !== tk.status && !(await this._aktion(() => this._ws("POST", base + "/status", { body: { status: w.status } })))) return false;
+    if (w.wdh && !tk.series_id && !(await this._aktion(() => this._ws("POST", "/api/v1/series", { body: { from_ticket_id: id, ...w.regel } })))) return false;
     return true;
+  }
+
+  // ---------- Wiederkehrende Tickets ----------
+  _darfSerie(ownerId, assigneeIds) {
+    if (this._erwachsen()) return true;
+    return this._rolle() === "child" && ownerId === this._ich() && !(assigneeIds || []).length;
+  }
+
+  _tageBis(iso) {
+    const heute = new Date(); heute.setHours(0, 0, 0, 0);
+    return Math.round((new Date(iso + "T00:00:00") - heute) / 864e5);
+  }
+
+  _datum(iso) {
+    if (!iso) return "";
+    const d = new Date(iso + "T00:00:00");
+    const opt = { day: "numeric", month: "numeric" };
+    if (d.getFullYear() !== new Date().getFullYear()) opt.year = "numeric";
+    return d.toLocaleDateString(this._hass.language || "de", opt);
+  }
+
+  _rhythmus(s) {
+    const t = this._t;
+    const takt = s.interval_count === 1 ? t.jede[s.interval_unit] : t.alleN.replace("%n", s.interval_count).replace("%e", t.einheit[s.interval_unit]);
+    return `${takt} · ${t.modus[s.mode]}`;
+  }
+
+  _regelFelder(r) {
+    const t = this._t;
+    return `<div class="raster">
+        <div class="feld"><label>${htEsc(t.rhythmus)}</label><div class="rhy"><input class="rn" type="number" min="1" max="999" inputmode="numeric" value="${r.interval_count}">
+          <select class="re">${HT_EINHEITEN.map((e) => `<option value="${e}" ${r.interval_unit === e ? "selected" : ""}>${htEsc(t.einheit[e])}</option>`).join("")}</select></div></div>
+        <div class="feld"><label>${htEsc(t.vorlauf)}</label><input class="rv" type="number" min="0" max="365" inputmode="numeric" value="${r.lead_days}"></div>
+      </div>
+      <div class="seg rm">${Object.keys(t.modus).map((m) => `<button data-v="${m}" class="${r.mode === m ? "an" : ""}">${htEsc(t.modus[m])}</button>`).join("")}</div>`;
+  }
+
+  _regelVerdrahten(box, r) {
+    if (!box) return;
+    box.querySelectorAll(".rm button").forEach((b) => b.addEventListener("click", () => {
+      r.mode = b.dataset.v;
+      box.querySelectorAll(".rm button").forEach((x) => x.classList.toggle("an", x === b));
+    }));
+  }
+
+  _regelLesen(box, r) {
+    if (!box) return;
+    r.interval_count = Math.max(1, Math.min(999, parseInt(box.querySelector(".rn").value, 10) || 1));
+    r.interval_unit = box.querySelector(".re").value;
+    r.lead_days = Math.max(0, Math.min(365, parseInt(box.querySelector(".rv").value, 10) || 0));
+  }
+
+  _wdhBox(d) {
+    const t = this._t, w = d.w, tk = d.ticket;
+    if (tk && tk.series_id) {
+      const s = (this._serien || []).find((x) => x.id === tk.series_id);
+      const text = s ? `${this._rhythmus(s)}${s.active ? "" : " · " + t.pausiert}` : t.serien;
+      return `<label>${htEsc(t.wdh)}</label><div class="wdh"><ha-icon icon="mdi:repeat"></ha-icon><span>${htEsc(text)}</span><button class="fg wdhv">${htEsc(t.serien)} …</button></div>`;
+    }
+    if (!this._darfSerie(tk ? tk.requested_by_id : this._ich(), tk ? tk.assignee_ids : w.assignee_ids)) return "";
+    return `<label class="haken"><input type="checkbox" class="wdhan" ${w.wdh ? "checked" : ""}>${htEsc(t.wdh)}</label>
+      <div class="wdhregel ${w.wdh ? "" : "aus"}">${this._regelFelder(w.regel)}</div>`;
+  }
+
+  async _serieGeplant(w) {
+    const body = { type: w.type, title: w.title, urgency: w.urgency, first_due: w.due_date, ...w.regel };
+    if (w.description.trim()) body.description = w.description;
+    if (w.importance) body.importance = w.importance;
+    if (w.assignee_ids.length) body.assignee_ids = w.assignee_ids;
+    if (w.felder.ha_area_id) body.ha_area_id = w.felder.ha_area_id;
+    const felder = {};
+    for (const k of HT_SERIENFELDER) {
+      const v = w.felder[k];
+      if (v != null && !(Array.isArray(v) && !v.length)) felder[k] = this._wert(k, v);
+    }
+    if (Object.keys(felder).length) body.fields = felder;
+    let serie;
+    if (!(await this._aktion(async () => { serie = await this._ws("POST", "/api/v1/series", { body }); }))) return false;
+    if (serie && serie.appears_on) this._hinweis({ message: this._t.geplant.replace("%d", this._datum(serie.appears_on)) });
+    return true;
+  }
+
+  _serienOeffnen() {
+    this._dialog = null;
+    this._serienAuf = true;
+    this._serieEdit = null;
+    this._serienZeichnen();
+    this._laden();
+  }
+
+  _serienZu() {
+    this._serienAuf = false;
+    this._serieEdit = null;
+    this._zu_();
+  }
+
+  _serieZeile(s) {
+    const t = this._t;
+    const kann = this._darfSerie(s.requested_by_id, s.assignee_ids);
+    const wer = (s.assignee_ids.length ? s.assignee_ids : [s.requested_by_id]).slice(0, 3).map((u) => this._avatar(u, 22)).join("");
+    const stand = !s.active ? t.pausiert
+      : s.open_ticket_id ? `<button class="sopen" data-t="${s.open_ticket_id}">#${s.open_ticket_id} ${htEsc(t.offen)}</button>`
+      : s.next_due ? htEsc(t.faelligAm.replace("%d", this._datum(s.next_due)) + (s.appears_on && s.appears_on < s.next_due ? " · " + t.erscheint.replace("%d", this._datum(s.appears_on)) : "")) : "";
+    const edit = this._serieEdit === s.id;
+    return `<div class="serie ${s.active ? "" : "pause"}" data-s="${s.id}">
+      <div class="zeile1"><ha-icon class="typ" icon="${HT_TYPEN[s.type]}"></ha-icon><span class="kt">${htEsc(s.title)}</span><span class="avs">${wer}</span></div>
+      <div class="zeile2"><span>${htEsc(this._rhythmus(s))}</span><span>·</span><span>${stand}</span></div>
+      ${kann && !edit ? `<div class="saktion"><button class="chip" data-a="edit">${htEsc(t.aendern)}</button><button class="chip" data-a="pause">${htEsc(s.active ? t.pausieren : t.fortsetzen)}</button><button class="chip weg" data-a="end">${htEsc(t.beenden)}</button></div>` : ""}
+      ${edit ? `<div class="sedit">
+        <input class="dtitel se-titel" value="${htEsc(s.title)}">
+        ${this._regelFelder(s)}
+        <div class="feld"><label>${htEsc(t.naechsteRunde)}</label><input class="datum se-next" type="date" value="${htEsc(s.next_due || "")}"></div>
+        ${this._erwachsen() ? `<label>${htEsc(t.zustaendig)}</label><div class="seg pe">${this._mitglieder().map((u) => `<button data-v="${htEsc(u.ha_user_id)}" class="${s.assignee_ids.includes(u.ha_user_id) ? "an" : ""}">${this._avatar(u.ha_user_id, 20)}${htEsc(this._name(u.ha_user_id))}</button>`).join("")}</div>` : ""}
+        <div class="fuss"><button class="weg" data-a="cancel">${htEsc(t.abbrechen)}</button><span></span><button class="ok" data-a="save">${htEsc(t.speichern)}</button></div>
+      </div>` : ""}
+    </div>`;
+  }
+
+  _serienZeichnen() {
+    if (!this._serienAuf || !this._t) return;
+    const t = this._t, ueber = this._portal(), liste = this._serien || [];
+    ueber.innerHTML = `<div class="schleier"></div><div class="dlg serien" role="dialog">
+      <div class="dkopf"><ha-icon icon="mdi:calendar-sync"></ha-icon><b class="stitel">${htEsc(t.serien)}</b><button class="zu" title="${htEsc(t.schliessen)}"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      ${liste.length ? liste.map((s) => this._serieZeile(s)).join("") : `<p class="leer">${htEsc(t.keineSerien)}</p>`}
+    </div>`;
+    const dlg = ueber.querySelector(".dlg");
+    ueber.querySelector(".schleier").addEventListener("click", () => this._serienZu());
+    dlg.querySelector(".zu").addEventListener("click", () => this._serienZu());
+    dlg.addEventListener("keydown", (e) => { if (e.key === "Escape") this._serienZu(); });
+    dlg.querySelectorAll(".serie").forEach((el) => {
+      const s = liste.find((x) => x.id === Number(el.dataset.s));
+      const base = `/api/v1/series/${s.id}`;
+      const danach = async (ok) => { if (ok) { this._serieEdit = null; await this._laden(); } };
+      const offen = el.querySelector(".sopen");
+      if (offen) offen.addEventListener("click", () => { this._serienAuf = false; this._oeffnen(Number(offen.dataset.t)); });
+      el.querySelectorAll("[data-a]").forEach((b) => b.addEventListener("click", async () => {
+        const a = b.dataset.a;
+        if (a === "edit") { this._serieEdit = s.id; this._serienZeichnen(); return; }
+        if (a === "cancel") { this._serieEdit = null; this._serienZeichnen(); return; }
+        if (a === "pause") { danach(await this._aktion(() => this._ws("PATCH", base, { body: { active: !s.active } }))); return; }
+        if (a === "end") {
+          if (!b.classList.contains("sicher")) { b.classList.add("sicher"); b.textContent = t.beendenFrage; setTimeout(() => { b.classList.remove("sicher"); b.textContent = t.beenden; }, 4000); return; }
+          danach(await this._aktion(() => this._ws("DELETE", base)));
+          return;
+        }
+        if (a === "save") {
+          const r = { interval_count: s.interval_count, interval_unit: s.interval_unit, mode: s.mode, lead_days: s.lead_days };
+          const box = el.querySelector(".sedit");
+          const modus = box.querySelector(".rm button.an");
+          if (modus) r.mode = modus.dataset.v;
+          this._regelLesen(box, r);
+          const patch = {};
+          for (const k of Object.keys(r)) if (r[k] !== s[k]) patch[k] = r[k];
+          const titel = box.querySelector(".se-titel").value.trim();
+          if (titel && titel !== s.title) patch.title = titel;
+          const next = box.querySelector(".se-next").value;
+          if (next && next !== s.next_due) patch.next_due = next;
+          const zu = [...box.querySelectorAll(".pe button.an")].map((x) => x.dataset.v);
+          if (box.querySelector(".pe") && [...zu].sort().join() !== [...s.assignee_ids].sort().join()) patch.assignee_ids = zu;
+          if (!Object.keys(patch).length) { this._serieEdit = null; this._serienZeichnen(); return; }
+          danach(await this._aktion(() => this._ws("PATCH", base, { body: patch })));
+        }
+      }));
+      const box = el.querySelector(".sedit");
+      if (box) {
+        this._regelVerdrahten(box, {});
+        box.querySelectorAll(".pe button").forEach((b) => b.addEventListener("click", () => b.classList.toggle("an")));
+      }
+    });
   }
 
   // ---------- Checkliste, Anhänge, Verlauf (im geöffneten Ticket) ----------
@@ -1023,6 +1239,17 @@ ha-card { padding: 14px 14px 16px; overflow: hidden; }
 .ok[disabled] { opacity:.6; }
 .weg { border:1px solid color-mix(in srgb, #ef5350 50%, transparent); background:none; color:#ef5350; border-radius:14px; padding:8px 14px; font:inherit; font-size:13px; cursor:pointer; }
 .weg.sicher { background:#ef5350; border-color:#ef5350; color:#fff; font-weight:600; }
+.chip.wdhk b { font-weight:600; } .chip.wdhk b:empty { display:none; }
+.wdh { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 10px; border-radius:12px; font-size:13px; background: color-mix(in srgb, var(--primary-color) 14%, transparent); }
+.wdh span { flex:1; min-width:160px; } .wdh ha-icon { --mdc-icon-size:18px; }
+.wdhregel.aus { display:none; } .wdhregel .seg { margin-top:8px; }
+.rhy { display:flex; gap:6px; } .rhy input { width:70px; flex:none; } .rhy select { flex:1; }
+.dlg.serien .dkopf { margin-bottom:6px; } .dlg.serien .dkopf ha-icon { color: var(--primary-color); } .stitel { flex:1; font-size:18px; }
+.serie { border:1px solid var(--tb-rand); border-radius:12px; padding:10px 11px; margin-top:8px; background:var(--tb-glas); }
+.serie.pause { opacity:.7; }
+.saktion { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; } .saktion .weg { padding:5px 12px; border-radius:18px; }
+.sopen { border:0; background:none; color:var(--primary-color); font:inherit; font-weight:600; cursor:pointer; padding:0; }
+.sedit { margin-top:8px; } .sedit .fuss { position:static; margin:12px 0 0; padding:0; border:0; background:none; }
 /* ---------- iPhone (p3, p4, p6) ---------- */
 .tabs { display:none; }
 button, .karte { -webkit-tap-highlight-color: transparent; }

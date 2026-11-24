@@ -434,6 +434,10 @@ def _change_status(
     if reason:
         payload["reason"] = reason
     emit(session, actor, EventType.STATUS_CHANGED, ticket.id, payload)
+    if status in CLOSED_STATUSES and old not in CLOSED_STATUSES and ticket.series_id:
+        from . import recurrence  # recurrence builds on this module
+
+        recurrence.round_closed(session, ticket)
 
 
 def set_assignees(
@@ -540,6 +544,10 @@ def delete_ticket(session: Session, actor: Actor, ticket: Ticket) -> list[Path]:
         )
     ]
     emit(session, actor, EventType.TICKET_DELETED, ticket.id, {"title": ticket.title})
+    if ticket.series_id and ticket.status not in CLOSED_STATUSES:
+        from . import recurrence  # recurrence builds on this module
+
+        recurrence.round_closed(session, ticket)
     session.delete(ticket)
     return files
 

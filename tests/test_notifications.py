@@ -164,6 +164,26 @@ def test_comment_and_ai() -> None:
     assert set(_by_person(notifications_for(burning, DATA, "de"))) == {"person.alex"}
 
 
+def test_recurring_round() -> None:
+    """A new round goes to its assignees (or the requester) with the due date."""
+    event = _event(
+        "ticket_created", "automation", assignee_ids=["robin"], due_date="2026-12-01"
+    )
+    event["via"] = "recurrence"
+    sent = _by_person(notifications_for(event, DATA, "de"))
+    assert set(sent) == {"person.robin"}
+    assert sent["person.robin"].kind == "recurring"
+    assert sent["person.robin"].title == "Wiederkehrend"
+    assert (
+        sent["person.robin"].message == f"#7 Spülmaschine {DASH} fällig am 01.12.2026"
+    )
+
+    nobody = _event("ticket_created", "automation", due_date="2026-12-01")
+    nobody["via"] = "recurrence"
+    alex = _by_person(notifications_for(nobody, DATA, "en"))["person.alex"]
+    assert alex.message == f"#7 Spülmaschine {DASH} due 2026-12-01"
+
+
 def test_due_reminders() -> None:
     """One message per person, sorted by due date; requester when nobody is assigned."""
     tickets = [
@@ -278,6 +298,36 @@ async def test_declined_purchase_is_told_once(
     assert [(e.data["person"], e.data["kind"]) for e in sent] == [
         ("person.robin", "declined")
     ]
+
+
+async def test_series_round_is_announced(
+    hass: HomeAssistant, loaded: MockConfigEntry, household: Household
+) -> None:
+    """A series whose first round is due now: Robin hears about it."""
+    await _call(
+        hass, "set_role", household.alex.id, person="person.robin", role="adult"
+    )
+    await _settle(hass, loaded)
+    sent = async_capture_events(hass, EVENT_NOTIFICATION)
+    client = loaded.runtime_data.client
+    series = await client.request(
+        "POST",
+        "/api/v1/series",
+        acting=Acting(household.alex.id, "ui"),
+        json={
+            "type": "repair",
+            "title": "Rauchmelder testen",
+            "mode": "fixed_calendar",
+            "interval_count": 1,
+            "interval_unit": "years",
+            "first_due": date.today().isoformat(),
+            "assignee_ids": [household.robin.id],
+        },
+    )
+    assert series["open_ticket_id"] is not None
+    await _settle(hass, loaded)
+    got = [(e.data["person"], e.data["kind"]) for e in sent]
+    assert got == [("person.robin", "recurring")]
 
 
 async def test_send_due_reminders(

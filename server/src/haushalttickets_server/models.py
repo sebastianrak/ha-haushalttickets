@@ -129,9 +129,17 @@ class Series(Base):
     mode: Mapped[str] = mapped_column(String(20))
     interval_count: Mapped[int | None] = mapped_column(Integer)
     interval_unit: Mapped[str] = mapped_column(String(10), default=IntervalUnit.MONTHS)
+    # Unused; fixed_calendar steps from ``anchor`` by the interval instead.
     rrule: Mapped[str | None] = mapped_column(String(255))
     lead_days: Mapped[int] = mapped_column(Integer, default=7)
+    # Due date of the next round to create; None while a round after completion
+    # is still open.
     next_due: Mapped[date | None] = mapped_column(Date)
+    # fixed_calendar: rounds fall on anchor + n * interval.
+    anchor: Mapped[date | None] = mapped_column(Date)
+    # Copied into every round: checklist texts and type-specific fields.
+    checklist: Mapped[list[str]] = mapped_column(JSONType, default=list)
+    fields: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = mapped_column(

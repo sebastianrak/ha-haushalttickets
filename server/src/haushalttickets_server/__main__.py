@@ -1,4 +1,4 @@
-"""Command line: ``haushalttickets-server [serve|migrate|token ...]``."""
+"""Command line: ``haushalttickets-server [serve|migrate|recur|token ...]``."""
 
 import argparse
 import sys
@@ -14,6 +14,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("serve", help="run the API server (default)")
     sub.add_parser("migrate", help="apply database migrations")
+    sub.add_parser("recur", help="create the recurring tickets that are due now")
     token = sub.add_parser("token", help="manage API tokens")
     token_sub = token.add_subparsers(dest="action", required=True)
     token_sub.add_parser("create", help="create a token").add_argument("name")
@@ -34,6 +35,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     factory = make_sessionmaker(make_engine(settings.database_url))
+    if args.command == "recur":
+        from . import recurrence
+
+        recurrence.TIMEZONE = settings.timezone
+        with factory() as session:
+            created = recurrence.run(session)
+            session.commit()
+        print(f"{len(created)} recurring ticket(s) created")
+        return 0
     with factory() as session:
         try:
             if args.action == "create":
