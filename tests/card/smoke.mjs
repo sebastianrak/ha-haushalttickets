@@ -5,7 +5,10 @@ import assert from "node:assert/strict";
 const same = (a, b) => assert.equal(JSON.stringify(a), JSON.stringify(b));
 
 const code = readFileSync(process.argv[2], "utf8");
-const dom = new JSDOM("<!doctype html><body></body>", { pretendToBeVisual: true, runScripts: "outside-only" });
+// Opened from a notification link: ?ticket=2
+const dom = new JSDOM("<!doctype html><body></body>", {
+  pretendToBeVisual: true, runScripts: "outside-only", url: "https://ha.example/dashboard-tickets/board?ticket=2",
+});
 const { window } = dom;
 window.matchMedia = () => ({ matches: false });
 window.URL.createObjectURL = () => "blob:fake";
@@ -70,7 +73,13 @@ const card = window.document.createElement("haushalttickets-card");
 card.setConfig({ titel: "Hausmeisterei" });
 window.document.body.appendChild(card);
 card.hass = hass;
-await tick(); await tick();
+await tick(); await tick(); await tick();
+
+// Link aus einer Benachrichtigung: #2 öffnet nach dem Laden, die Nummer verschwindet aus der Adresse
+assert.ok(sent.some((m) => m.path === "/api/v1/tickets/2"), "link opens #2");
+assert.equal(window.location.pathname + window.location.search, "/dashboard-tickets/board");
+assert.ok(window.document.querySelector(".haushalttickets-dialog").shadowRoot.querySelector(".dtitel"));
+card._zu_();
 
 const root = card.shadowRoot;
 const spalten = [...root.querySelectorAll(".spalte")].map((s) => s.dataset.s);
@@ -193,5 +202,19 @@ netzFehler = true;
 await waehlen(fotoFeld, [new window.File(["abc"], "scan.pdf", { type: "application/pdf" })]);
 await tick();
 assert.match(hinweise.pop(), /^Hochladen fehlgeschlagen: scan\.pdf \(0 MB\) – Load failed$/);
+
+// Link, während das Board schon offen ist (HA navigiert und meldet location-changed)
+card._zu_();
+window.history.pushState(null, "", "/dashboard-tickets/board?ticket=2");
+sent.length = 0;
+window.dispatchEvent(new window.Event("location-changed"));
+await tick(); await tick();
+assert.ok(sent.some((m) => m.path === "/api/v1/tickets/2"), "link while open");
+assert.equal(window.location.search, "");
+window.history.pushState(null, "", "/dashboard-tickets/board?ticket=abc");
+sent.length = 0;
+window.dispatchEvent(new window.Event("location-changed"));
+await tick();
+assert.ok(!sent.some((m) => /\/api\/v1\/tickets\/\w+$/.test(m.path)), "no ticket for a bad number");
 
 console.log("card smoke test ok");

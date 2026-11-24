@@ -4,7 +4,7 @@ A ticket system for a household – repairs, purchases and work on Home Assistan
 with a Home Assistant integration and AI access over MCP.
 
 > **Status: pre-alpha.** Server, integration (sensors, actions, events, notifications
-> with buttons), the Kanban card and the MCP tools for AI assistants work; recurring
+> that open the ticket), the Kanban card and the MCP tools for AI assistants work; recurring
 > tickets, the emergency UI and the nightly run are still to come.
 
 ## Idea

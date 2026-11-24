@@ -3,8 +3,9 @@
  *
  * Basiert auf dem Ticket-Board von Kily's World (https://kilysworld.com,
  * https://github.com/johnkily/ha-blueprints, MIT-Lizenz) einschließlich der lokalen
- * Anpassungen p1–p6 (Spalte „Neue Tickets“, iPhone-Reiter, Dialog als Portal mit festem
- * Fußbalken, zweistufiges Löschen, Hinweise statt alert(), Touch-Bedienung ohne Ziehen).
+ * Anpassungen p1–p6 (erste Spalte umbenannt, seit 0.5.0 „Offen“, iPhone-Reiter,
+ * Dialog als Portal mit festem Fußbalken, zweistufiges Löschen, Hinweise statt alert(),
+ * Touch-Bedienung ohne Ziehen).
  * Die Tickets liegen auf dem Haushalttickets-Server; die Karte spricht ihn über die
  * Integration an (WebSocket haushalttickets/request, Fotos über /api/haushalttickets/…).
  * Was jemand darf, entscheidet allein der Server.
@@ -15,11 +16,11 @@
  *
  * MIT-Lizenz
  */
-const HT_VERSION = "0.4.0";
+const HT_VERSION = "0.5.0";
 
 const HT_TEXTE = {
   de: {
-    spalten: { new: "Neue Tickets", discussing: "Wird beredet", in_progress: "In Arbeit", acceptance: "Abnahme", done: "Erledigt", rejected: "Träum weiter" },
+    spalten: { new: "Offen", discussing: "Wird beredet", in_progress: "In Arbeit", acceptance: "Abnahme", done: "Erledigt", rejected: "Träum weiter" },
     dringlich: { someday: "Irgendwann", this_week: "Diese Woche", burning: "Brennt" },
     typen: { repair: "Reparatur", purchase: "Anschaffung", home_assistant: "Home Assistant" },
     alle: "Alle", ich: "Meine", alleTypen: "Alle Typen", suche: "Suchen …", neu: "Neues Ticket", titel: "Was ist zu tun?",
@@ -69,7 +70,7 @@ const HT_TEXTE = {
     },
   },
   en: {
-    spalten: { new: "Inbox", discussing: "Discussing", in_progress: "In progress", acceptance: "Review", done: "Done", rejected: "Dream on" },
+    spalten: { new: "Open", discussing: "Discussing", in_progress: "In progress", acceptance: "Review", done: "Done", rejected: "Dream on" },
     dringlich: { someday: "Someday", this_week: "This week", burning: "Urgent" },
     typen: { repair: "Repair", purchase: "Purchase", home_assistant: "Home Assistant" },
     alle: "All", ich: "Mine", alleTypen: "All types", suche: "Search …", neu: "New ticket", titel: "What needs doing?",
@@ -107,7 +108,7 @@ const HT_TEXTE = {
 };
 
 const HT_SPALTEN = [
-  { key: "new", icon: "mdi:inbox-arrow-down", farbe: "#90a4ae" },
+  { key: "new", icon: "mdi:clipboard-list-outline", farbe: "#90a4ae" },
   { key: "discussing", icon: "mdi:chat-processing-outline", farbe: "#4fc3f7" },
   { key: "in_progress", icon: "mdi:hammer-wrench", farbe: "#ffb74d" },
   { key: "acceptance", icon: "mdi:clipboard-check-outline", farbe: "#ce93d8" },
@@ -178,17 +179,21 @@ class HaushaltticketsCard extends HTMLElement {
     const erst = !this._hass;
     this._hass = hass;
     this._t = HT_TEXTE[(hass.language || "de").startsWith("de") ? "de" : "en"];
-    if (erst) { this._kopf(); this._laden(); this._abonnieren(); }
+    if (erst) { this._kopf(); this._laden(); this._abonnieren(); this._ausAdresse(); }
   }
 
   getCardSize() { return 8; }
   getGridOptions() { return { columns: "full", min_columns: 6 }; }
 
   connectedCallback() {
+    this._adresse = this._adresse || (() => this._ausAdresse());
+    window.addEventListener("location-changed", this._adresse);
     if (this._hass && !this._abo) { this._abonnieren(); this._laden(); }
+    this._ausAdresse();
   }
 
   disconnectedCallback() {
+    if (this._adresse) window.removeEventListener("location-changed", this._adresse);
     if (this._abo) { this._abo.then((f) => f && f()).catch(() => {}); this._abo = null; }
     if (this._pt) { this._pt.remove(); this._dialog = null; }
   }
@@ -218,6 +223,7 @@ class HaushaltticketsCard extends HTMLElement {
       this._zuAnzahl = zu.count;
       this._geladen = true;
       if (!vorher) this._kopf(); else this._board();
+      if (this._spaeter) { const id = this._spaeter; this._spaeter = null; this._oeffnen(id); }
     } catch (e) {
       this._fehler(this._t.keinZugriff + " (" + (e.message || e.code || e) + ")");
     } finally {
@@ -458,6 +464,18 @@ class HaushaltticketsCard extends HTMLElement {
   }
 
   // ---------- Dialog ----------
+  // Link aus einer Benachrichtigung („…?ticket=7“): Ticket direkt öffnen und die
+  // Nummer aus der Adresse nehmen, damit Neuladen oder Zurück es nicht erneut öffnet
+  _ausAdresse() {
+    if (!this._hass || !this.isConnected) return;
+    const url = new URL(window.location.href);
+    const id = Number(url.searchParams.get("ticket"));
+    if (!Number.isInteger(id) || id < 1) return;
+    url.searchParams.delete("ticket");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    if (this._geladen) this._oeffnen(id); else this._spaeter = id;   // Dialog braucht die Mitglieder
+  }
+
   async _oeffnen(id) {
     const neu = id == null;
     const ueber = this._portal();

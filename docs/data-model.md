@@ -41,8 +41,19 @@ not translated labels, because Home Assistant's MCP server passes no language
 
 Approval is required when `price_estimated` ≥ threshold (default **250 €**, set in the
 integration options). The approver must be an adult or admin other than the requester.
-The AI can never approve. *Proposal:* while approval is `pending`, the ticket cannot
+The AI can never approve. While approval is `pending` or `declined`, the ticket cannot
 move beyond `discussing`.
+
+The approval moves the ticket (recorded like any status change, with a `reason`):
+
+| Step | Status afterwards |
+|---|---|
+| Approval becomes required (on creation or a price change) | `discussing`, unless closed |
+| Approved | `new` ("Offen", to do), if it was `discussing` or `rejected` |
+| Declined | `rejected` ("Träum weiter"), unless closed |
+
+These moves happen for whoever took the step, also when that person could not move the
+ticket by hand. When the price drops below the threshold again, the status stays.
 
 Invoices are attachments of kind `invoice`.
 
@@ -96,6 +107,7 @@ Invoices are attachments of kind `invoice`.
 - New users synced from Home Assistant start as `admin` if they are Home Assistant
   administrators, otherwise as `child` (least privilege, *proposal*); an admin assigns
   the right role.
+- `new` is shown as "Offen": agreed and to do, not started yet. New tickets start there.
 - Statuses can move freely between `new` … `acceptance` for humans with the right role.
 - `done`: only the requester (acceptance). *Proposal:* an admin may close in exceptional
   cases; this is recorded in the history.

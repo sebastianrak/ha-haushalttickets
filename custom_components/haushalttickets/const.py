@@ -9,9 +9,6 @@ DOMAIN: Final = "haushalttickets"
 EVENT_TICKET: Final = "haushalttickets_event"
 # One per person who should hear about a change; an automation delivers it.
 EVENT_NOTIFICATION: Final = "haushalttickets_notification"
-# Buttons in mobile app notifications ("HAUSHALTTICKETS_APPROVE_7", ...).
-EVENT_NOTIFICATION_ACTION: Final = "mobile_app_notification_action"
-ACTION_PREFIX: Final = "HAUSHALTTICKETS_"
 
 # LLM API with the ticket tools; mcp_server serves it at /api/mcp/haushalttickets.
 LLM_API_ID: Final = "haushalttickets"
