@@ -27,6 +27,7 @@ def ha_whoami() -> dict:
         "yaml": os.environ.get("ENABLE_YAML_CONFIG_EDITING"),
         "confirm": os.environ.get("ENABLE_YAML_EDIT_CONFIRM"),
         "cwd": os.getcwd(),
+        "settings_ui": os.environ.get("HA_MCP_DISABLE_SETTINGS_UI"),
     }
 
 

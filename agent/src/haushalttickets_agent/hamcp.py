@@ -30,6 +30,10 @@ def server_env(config: Config, *, yaml_edit: bool, confirm: bool) -> dict[str, s
         "HAMCP_ENABLE_FILESYSTEM_TOOLS": "true",
         "ENABLE_YAML_CONFIG_EDITING": "true" if yaml_edit else "false",
         "ENABLE_YAML_EDIT_CONFIRM": "true" if confirm else "false",
+        # No settings web UI: ha_get_overview would show its URL to the AI, and it
+        # can change which tools ha-mcp offers. No update check against PyPI.
+        "HA_MCP_DISABLE_SETTINGS_UI": "true",
+        "HA_MCP_DISABLE_UPDATE_CHECK": "true",
     }
     if config.ha_ca_file:
         env["SSL_CERT_FILE"] = config.ha_ca_file
