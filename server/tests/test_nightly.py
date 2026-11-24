@@ -173,6 +173,20 @@ def test_new_draft_withdraws_approval(api: Api, runner: TestClient) -> None:
     assert approved["ai_implement_draft_version"] == 2
 
 
+def test_deviation_returns_a_new_draft(api: Api, runner: TestClient) -> None:
+    create(api, "robin", type="home_assistant")
+    flags(api, "robin", 1, draft_requested=True)
+    run_id = start(runner)
+    draft(runner, run_id, 1)
+    flags(api, "robin", 1, implement_approved=True)
+    # Implementing would deviate: the runner stores a new draft instead.
+    ticket = draft(runner, run_id, 1, "v2 mit anderer Entität")["ticket"]
+    assert ticket["latest_draft_version"] == 2
+    assert ticket["ai_implement_approved"] is False
+    assert ticket["status"] == "new"
+    assert runner.get("/api/v1/nightly/work").json()["items"] == []
+
+
 def test_rules_for_results(api: Api, runner: TestClient) -> None:
     create(api, "robin", type="repair")
     run_id = start(runner)

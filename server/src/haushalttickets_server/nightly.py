@@ -333,7 +333,9 @@ def _store_draft(
     body: NightlyResult,
     changed: dict[str, Any],
 ) -> int:
-    if not ticket.ai_draft_requested:
+    # A draft comes back when one was requested, or when implementing an approved
+    # draft would have to deviate from it (decision 50).
+    if not ticket.ai_draft_requested and not ticket.ai_implement_approved:
         raise Invalid("draft_not_requested", "No draft is requested for this ticket.")
     if not body.draft:
         raise Invalid("draft_missing", "The draft text is missing.")
@@ -342,9 +344,10 @@ def _store_draft(
         AIDraft(ticket_id=ticket.id, version=version, body=body.draft, run_id=run.id)
     )
     record(session, actor, ticket, "ai_draft", None, version)
-    record(session, actor, ticket, "ai_draft_requested", True, False)
-    ticket.ai_draft_requested = False
-    changed["ai_draft_requested"] = False
+    if ticket.ai_draft_requested:
+        record(session, actor, ticket, "ai_draft_requested", True, False)
+        ticket.ai_draft_requested = False
+        changed["ai_draft_requested"] = False
     # An approval refers to an older draft and lapses (decision 50).
     clear_implement_approval(session, actor, ticket, changed)
     ticket.updated_at = _now()

@@ -1,0 +1,33 @@
+[project]
+name = "haushalttickets-agent"
+dynamic = ["version"]
+description = "Nightly AI run for Haushalttickets (runs in its own Debian LXC)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.13"
+dependencies = [
+    # v2 renamed and changed APIs; stay on the stable 1.x client.
+    "mcp>=1.20,<2",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3",
+]
+
+[project.scripts]
+haushalttickets-nightly = "haushalttickets_agent.__main__:main"
+haushalttickets-guard = "haushalttickets_agent.guard:main"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/haushalttickets_agent/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/haushalttickets_agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
