@@ -68,16 +68,37 @@ The AI agent may move a ticket at most to `acceptance`. It never sets `done`, ne
 rejects, never deletes.
 
 ### AI approvals and nightly run
-- Per ticket: **draft** (propose only) and **implement** (build after explicit approval).
-- 03:00 daily. A pre-check exits immediately unless approved tickets wait and the
-  Claude quota is sufficient.
-- Before any implementation the Home Assistant configuration is committed to a
-  **private** Git repository (never this one, never `secrets.yaml`). Only targeted
-  changes, never whole-file overwrites. Afterwards the ticket moves to `acceptance`.
-- The run uses a dedicated Home Assistant account "KI-Hausmeister" (admin), so its
-  changes are distinguishable and its tokens can be revoked. Home Assistant admins
+- Per ticket: **draft** (propose only, all types) and **implement** (Home Assistant
+  work only). Implementing needs a draft; the approval refers to exactly that draft
+  version. Asking for a new draft, or a new draft arriving, withdraws it.
+- Runs in its **own container** (`agent/`, `deploy/agent/`), not next to the ticket
+  database: Claude Code needs ~4 GB RAM, and an AI with a shell next to the database
+  could bypass the rules. A systemd timer starts it at 03:00; a missed night is not
+  made up during the day. Time limit 2 h; no limit on the number of tickets.
+- A plain runner, not the AI, talks to the ticket server with a **runner token**
+  bound to the AI account (role `ai_agent`, channel `nightly_run`): it reads the work
+  and stores drafts, change log entries, comments and status. The AI gets the ticket
+  as text and returns a structured answer.
+- Draft phase: Home Assistant read-only (ha-mcp) plus web. Implementation phase:
+  Home Assistant writes, no web (prompt injection from web pages cannot reach the
+  writing phase). No shell, no local files in either phase. Allowed tools per phase
+  plus a guard hook in Claude Code's managed settings that checks every writing call.
+- Implementation may create and change automations, scripts, scenes, helpers and
+  dashboards, assign areas/labels/categories, and write whole top-level YAML keys in
+  `packages/*.yaml` and `configuration.yaml` (not `homeassistant:`, no `!include`).
+  Never delete, rename entity IDs, call services, reload or restart.
+- Before and after every change the runner exports the configuration (YAML files,
+  dashboards, helpers, labels) to a **private** Git repository (never this one, never
+  `secrets.yaml`); the commit goes into the ticket's change log. If Home Assistant's
+  configuration check fails after a YAML change, the old keys are put back.
+- The run uses the Home Assistant account "KI-Hausmeister" (admin, its own token), so
+  its changes are distinguishable and its token can be revoked. Home Assistant admins
   start as ticket admins, so this account must be set to the role `ai_agent`
-  (action `haushalttickets.set_role`) right after it is created.
+  (action `haushalttickets.set_role`) right after it is created; the runner token
+  refuses to work otherwise.
+- Reporting: no single pushes for the run's actions; one summary per person when it
+  ends, problems to the admins; a watchdog event when approved work waits 26 h
+  without a run.
 
 ## Known trade-offs
 

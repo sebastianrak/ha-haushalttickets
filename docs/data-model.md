@@ -27,6 +27,7 @@ not translated labels, because Home Assistant's MCP server passes no language
 | `ai_draft_requested` | bool | "AI should draft" – any type |
 | `ai_implement_approved` | bool | "AI should implement" – `home_assistant` only |
 | `ai_implement_approved_by/_at` | user, timestamp | Who approved, when |
+| `ai_implement_draft_version` | int | Draft version the approval refers to |
 | `created_at`, `updated_at`, `closed_at` | timestamp | |
 
 ### Purchase fields (`type = purchase`)
@@ -85,8 +86,8 @@ Invoices are attachments of kind `invoice`.
 | `attachment` | `ticket_id`, `kind` (`photo`, `invoice`, `document`), `filename`, `content_type`, `size`, `sha256`, `uploaded_by`, `at` | Files live in the LXC |
 | `checklist_item` | `ticket_id`, `position`, `text`, `done`, `done_by`, `done_at` | Optional sub-steps |
 | `ai_draft` | `ticket_id`, `version`, `body`, `run_id`, `created_at` | AI proposals |
-| `change_log` | `ticket_id`, `run_id`, `summary`, `objects`, `git_commit`, `at` | Home Assistant changes by the nightly run |
-| `nightly_run` | `started_at`, `ended_at`, `outcome` (`no_work`, `quota_low`, `done`, `failed`), `tickets` | Run log |
+| `change_log` | `ticket_id`, `run_id`, `summary`, `objects`, `git_commit`, `needs_restart`, `at` | Home Assistant changes by the nightly run |
+| `nightly_run` | `started_at`, `ended_at`, `outcome` (`no_work`, `quota_low`, `done`, `failed`, `aborted`), `tickets`, `results`, `usage` | Run log |
 | `series` | template fields, `checklist`, `fields`, `mode`, `interval`, `anchor`, `lead_days`, `next_due`, `active` | Recurring tickets |
 
 ## Recurring tickets

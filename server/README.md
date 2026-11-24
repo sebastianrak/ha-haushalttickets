@@ -12,6 +12,8 @@ haushalttickets-server token create NAME     # create an API token (printed once
 haushalttickets-server token revoke NAME
 haushalttickets-server emergency password [--user NAME]  # emergency UI login
 haushalttickets-server emergency cert [--renew] [--remove-custom]
+haushalttickets-server nightly token --user "KI-Hausmeister"  # runner token (printed once)
+haushalttickets-server nightly status | revoke
 haushalttickets-server                       # run the API (same as "serve")
 ```
 
@@ -67,7 +69,11 @@ The Home Assistant integration names the acting household member:
 | Header | Meaning |
 |---|---|
 | `X-Acting-User` | Home Assistant user id. Without it the request acts as the integration itself (read and user sync only). |
-| `X-Acting-Via` | `ui` (default), `mcp`, `nightly_run`, `automation`. `mcp` and `nightly_run` always follow the AI rules. `recurrence` and `emergency_ui` are reserved for the server itself. |
+| `X-Acting-Via` | `ui` (default), `mcp`, `automation`. `mcp` always follows the AI rules. `recurrence`, `emergency_ui` and `nightly_run` are reserved for the server and the runner token. |
+
+The nightly runner has its own token (`nightly token`). It always acts as the AI
+account (which must have the role `ai_agent`) over `nightly_run`, ignores the headers
+above, reads everything, and writes only under `/api/v1/nightly/`.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -90,6 +96,11 @@ The Home Assistant integration names the acting household member:
 | GET, POST | `/api/v1/series` | Recurring series: list, create (from a ticket or blank) |
 | GET, PATCH, DELETE | `/api/v1/series/{id}` | Read, change/pause/resume, end (its tickets stay) |
 | GET | `/api/v1/events?after=SEQ` | Event feed for notifications and refresh |
+| GET | `/api/v1/tickets/{id}/drafts` | AI drafts, newest first |
+| GET | `/api/v1/tickets/{id}/changes` | Changes the nightly run made in Home Assistant |
+| GET | `/api/v1/nightly/work` | Runner: approved implementations, then requested drafts |
+| POST, PATCH | `/api/v1/nightly/runs[/{id}]` | Runner: start and end a run (announces the results) |
+| POST | `/api/v1/nightly/tickets/{id}/result` | Runner: store a draft, a change or a failure |
 
 Errors return `{"detail": {"code": "...", "detail": "..."}}` with stable codes such as
 `acceptance_by_requester`, `approval_pending` or `ai_status_forbidden`.

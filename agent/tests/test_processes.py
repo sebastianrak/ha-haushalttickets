@@ -6,10 +6,11 @@ import asyncio
 from pathlib import Path
 import sys
 
+import pytest
+
 from haushalttickets_agent import claude
 from haushalttickets_agent.config import Config
 from haushalttickets_agent.hamcp import HaMcp, HaMcpError
-import pytest
 
 FAKES = Path(__file__).parent / "fakes"
 

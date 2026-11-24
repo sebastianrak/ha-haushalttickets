@@ -21,6 +21,8 @@ jobs:
         run: |
           version=$(grep -Po '__version__ = "\K[^"]+' server/src/haushalttickets_server/__init__.py)
           test "v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME does not match server version $version"; exit 1; }
+          agent=$(grep -Po '__version__ = "\K[^"]+' agent/src/haushalttickets_agent/__init__.py)
+          test "$agent" = "$version" || { echo "Agent version $agent differs"; exit 1; }
           if [ -f custom_components/haushalttickets/manifest.json ]; then
             manifest=$(python3 -c 'import json; print(json.load(open("custom_components/haushalttickets/manifest.json"))["version"])')
             test "$manifest" = "$version" || { echo "Integration version $manifest differs"; exit 1; }
@@ -33,8 +35,20 @@ jobs:
           # LXC admin tools; haushalttickets-update installs them from the release
           cp ../deploy/lxc/haushalttickets-update ../deploy/lxc/haushalttickets-backup \
             ../deploy/lxc/haushalttickets-ctl ../dist/
-          cd ../dist && sha256sum -- *.whl requirements.txt haushalttickets-update \
+          cd ../dist && sha256sum -- haushalttickets_server-*.whl requirements.txt haushalttickets-update \
             haushalttickets-backup haushalttickets-ctl > SHA256SUMS
+      - name: Build nightly run (agent)
+        working-directory: agent
+        run: |
+          uv build --wheel --out-dir ../dist
+          cp requirements.txt ../dist/agent-requirements.txt
+          cd ../deploy/agent
+          cp ha-mcp-requirements.txt managed-settings.json systemd/haushalttickets-nightly.service \
+            systemd/haushalttickets-nightly.timer haushalttickets-agent-ctl haushalttickets-agent-update ../../dist/
+          # Own checksum file: the server's update checks every line of SHA256SUMS.
+          cd ../../dist && sha256sum -- haushalttickets_agent-*.whl agent-requirements.txt \
+            ha-mcp-requirements.txt managed-settings.json haushalttickets-nightly.service \
+            haushalttickets-nightly.timer haushalttickets-agent-ctl haushalttickets-agent-update > AGENT-SHA256SUMS
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

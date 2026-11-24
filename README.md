@@ -4,8 +4,8 @@ A ticket system for a household – repairs, purchases and work on Home Assistan
 with a Home Assistant integration and AI access over MCP.
 
 > **Status: pre-alpha.** Server, integration (sensors, actions, events, notifications
-> that open the ticket), the Kanban card, recurring tickets, the emergency UI and the
-> MCP tools for AI assistants work; the nightly run is still to come.
+> that open the ticket), the Kanban card, recurring tickets, the emergency UI, the
+> MCP tools for AI assistants and the nightly AI run (in its own container) work.
 
 ## Idea
 
@@ -27,14 +27,18 @@ claude.ai ──Nabu Casa──▶ Home Assistant ── mcp_server (/api/mcp/ha
                               ▼                 │
                    custom_components/haushalttickets ──REST──▶ LXC: haushalttickets-server
                    (entities, card, events, actions)              FastAPI + PostgreSQL
-                                                                 attachments, emergency UI,
-                                                                 nightly AI run (Claude Code)
+                              ▲                                  attachments, emergency UI
+                              │ ha-mcp (own token)                        ▲
+                              │                                           │ runner token
+                   LXC: haushalttickets-agent ────────────────────────────┘
+                   nightly AI run (Claude Code, 03:00), git export of the HA config
 ```
 
 | Part | Path | Purpose |
 |---|---|---|
 | Server | `server/` | FastAPI + PostgreSQL in a Debian LXC; source of truth for tickets, attachments, history |
 | Integration | `custom_components/haushalttickets/` | Sensors, events, actions, Kanban card, file proxy, LLM API for MCP, see [docs/integration.md](docs/integration.md) and [docs/card.md](docs/card.md) |
+| Nightly run | `agent/` | Drafts and approved implementations by Claude Code in its own LXC, see [agent/README.md](agent/README.md) and [deploy/agent/README.md](deploy/agent/README.md) |
 | Docs | `docs/` | Architecture and decisions |
 
 See [docs/architecture.md](docs/architecture.md), [docs/data-model.md](docs/data-model.md) and [deploy/README.md](deploy/README.md) for details.
@@ -44,8 +48,9 @@ See [docs/architecture.md](docs/architecture.md), [docs/data-model.md](docs/data
 - Home Assistant accounts are the ticket accounts. Roles: admin, adult, child, AI agent.
 - The AI can never set a ticket to *done* and can never delete. Acceptance is done by
   the person who requested the ticket.
-- Nightly implementation happens only for tickets explicitly approved for it; the
-  Home Assistant configuration is backed up to a private Git repository first.
+- Nightly implementation happens only for tickets explicitly approved for it, and
+  only for the draft version that was approved; the Home Assistant configuration is
+  exported to a private Git repository before and after every change.
 
 ## Security notes
 
@@ -58,6 +63,9 @@ See [docs/architecture.md](docs/architecture.md), [docs/data-model.md](docs/data
 ```bash
 # server
 cd server && uv run --extra test pytest
+
+# nightly run (agent)
+cd agent && uv run --extra test pytest
 
 # integration (Home Assistant test harness; starts the server from server/.venv)
 (cd server && uv sync) && uv venv .venv-ha --python 3.14 \

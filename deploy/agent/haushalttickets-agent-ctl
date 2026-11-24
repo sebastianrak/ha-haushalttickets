@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Nightly run (KI-Hausmeister): set up and operate. Run as root in the agent container.
+#   haushalttickets-agent-ctl setup         # tokens, addresses, Claude login, test, timer
+#   haushalttickets-agent-ctl claude-token  # renew the Claude subscription token
+#   haushalttickets-agent-ctl probe         # ticket server, Home Assistant, Claude
+#   haushalttickets-agent-ctl export        # export the HA configuration to git now
+#   haushalttickets-agent-ctl check         # Home Assistant's configuration check
+#   haushalttickets-agent-ctl run-now       # start a run now (uses usage!)
+#   haushalttickets-agent-ctl status        # timer, last run
+#   haushalttickets-agent-ctl pubkey        # deploy key for the private repository
+set -euo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+unset LANGUAGE
+
+AGENT_USER="hausmeister"
+STATE_DIR="/var/lib/haushalttickets-agent"
+ENV_FILE="/etc/haushalttickets-agent/agent.env"
+NIGHTLY="/opt/haushalttickets-agent/venv/bin/haushalttickets-nightly"
+CLAUDE="$STATE_DIR/.local/bin/claude"
+
+die() { echo "Error: $*" >&2; exit 1; }
+[[ $EUID -eq 0 ]] || die "run as root"
+[[ -f $ENV_FILE ]] || die "$ENV_FILE not found (install-agent.sh first)"
+
+setting() { grep -Po "^$1=\K.*" "$ENV_FILE" 2>/dev/null || true; }
+
+set_setting() {
+  [[ $2 =~ ^[A-Za-z0-9._:/@+=~-]*$ ]] || die "value for $1 contains characters that are not allowed"
+  if grep -q "^$1=" "$ENV_FILE"; then
+    sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE"
+  fi
+}
+
+# Run as the agent user with the settings (the file is readable by that group).
+# shellcheck disable=SC2016  # $0 and $@ belong to the inner bash
+as_agent() {
+  runuser -u "$AGENT_USER" -- env -i HOME="$STATE_DIR" LANG=C.UTF-8 \
+    PATH="$STATE_DIR/.local/bin:/usr/local/bin:/usr/bin:/bin" \
+    bash -c 'set -a; . "$0"; set +a; exec "$@"' "$ENV_FILE" "$@"
+}
+
+ask() {  # ask NAME "question" [secret]
+  local name=$1 question=$2 secret=${3:-} current answer
+  current=$(setting "$name")
+  if [[ -n $secret ]]; then
+    local shown="none"
+    [[ -n $current ]] && shown="set, Enter keeps it"
+    read -r -s -p "$question [$shown]: " answer
+    echo
+  else
+    read -r -p "$question [${current:--}]: " answer
+  fi
+  [[ $answer == "-" ]] && answer=""
+  [[ -n $answer ]] && set_setting "$name" "$answer"
+  return 0
+}
+
+claude_token() {
+  cat <<EOF
+Claude login for the nightly run (subscription, valid for one year).
+"claude setup-token" shows a link: open it in your browser, log in, and paste the
+code back here. It then prints a token starting with sk-ant-oat01-.
+EOF
+  as_agent "$CLAUDE" setup-token || true
+  ask CLAUDE_CODE_OAUTH_TOKEN "Paste the token it printed" secret
+}
+
+setup() {
+  echo "Ticket server (in the ticket container: haushalttickets-ctl nightly-setup)"
+  ask HT_AGENT_TICKETS_URL "Ticket server URL"
+  ask HT_AGENT_TICKETS_TOKEN "Runner token" secret
+  echo
+  echo "Home Assistant: log in as KI-Hausmeister, Profile -> Security -> Long-lived token"
+  ask HT_AGENT_HA_URL "Home Assistant URL (https://...:8123, name must match its certificate)"
+  ask HT_AGENT_HA_TOKEN "Long-lived token of KI-Hausmeister" secret
+  echo
+  echo "Private repository for the configuration export (deploy key: haushalttickets-agent-ctl pubkey)"
+  ask HT_AGENT_GIT_REMOTE "git remote, e.g. git@github.com:owner/ha-config.git ('-' = local only)"
+  echo
+  if [[ -z $(setting CLAUDE_CODE_OAUTH_TOKEN) ]] || { read -r -p "Renew the Claude token? [y/N]: " a && [[ $a =~ ^[yYjJ] ]]; }; then
+    claude_token
+  fi
+  echo
+  echo "==> Test"
+  if as_agent "$NIGHTLY" probe; then
+    systemctl enable --now haushalttickets-nightly.timer
+    echo "Timer on: every night at 03:00."
+    systemctl list-timers haushalttickets-nightly.timer --no-pager
+  else
+    echo "Test failed; the timer stays off. Fix the settings and run: haushalttickets-agent-ctl setup"
+    return 1
+  fi
+}
+
+case "${1:-}" in
+  setup) setup ;;
+  claude-token) claude_token ;;
+  probe | export | check) as_agent "$NIGHTLY" "$1" ;;
+  run-now)
+    systemctl start --no-block haushalttickets-nightly.service
+    echo "Started. Follow it with: journalctl -u haushalttickets-nightly -f"
+    ;;
+  status)
+    systemctl list-timers haushalttickets-nightly.timer --no-pager || true
+    journalctl -u haushalttickets-nightly -n 30 --no-pager || true
+    ;;
+  pubkey) cat "$STATE_DIR/.ssh/ha-config.pub" ;;
+  *) sed -n '2,10p' "$0"; exit 2 ;;
+esac

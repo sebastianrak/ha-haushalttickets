@@ -1,0 +1,82 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash",
+      "BashOutput",
+      "KillShell",
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "NotebookEdit",
+      "Glob",
+      "Grep",
+      "LS",
+      "Task",
+      "Agent",
+      "TodoWrite",
+      "mcp__ha__ha_call_service",
+      "mcp__ha__ha_call_event",
+      "mcp__ha__ha_bulk_control",
+      "mcp__ha__ha_restart",
+      "mcp__ha__ha_reload_core",
+      "mcp__ha__ha_write_file",
+      "mcp__ha__ha_delete_file",
+      "mcp__ha__ha_set_integration",
+      "mcp__ha__ha_set_device",
+      "mcp__ha__ha_set_area_or_floor",
+      "mcp__ha__ha_set_zone",
+      "mcp__ha__ha_set_todo_item",
+      "mcp__ha__ha_remove_helpers_integrations",
+      "mcp__ha__ha_remove_entity",
+      "mcp__ha__ha_remove_device",
+      "mcp__ha__ha_remove_area_or_floor",
+      "mcp__ha__ha_remove_zone",
+      "mcp__ha__ha_remove_todo_item",
+      "mcp__ha__ha_config_remove_automation",
+      "mcp__ha__ha_config_remove_script",
+      "mcp__ha__ha_config_remove_scene",
+      "mcp__ha__ha_config_remove_category",
+      "mcp__ha__ha_config_remove_label",
+      "mcp__ha__ha_config_remove_group",
+      "mcp__ha__ha_config_remove_calendar_event",
+      "mcp__ha__ha_config_delete_dashboard",
+      "mcp__ha__ha_config_delete_dashboard_resource",
+      "mcp__ha__ha_config_set_dashboard_resource",
+      "mcp__ha__ha_manage_backup",
+      "mcp__ha__ha_manage_app",
+      "mcp__ha__ha_manage_hacs",
+      "mcp__ha__ha_manage_updates",
+      "mcp__ha__ha_manage_blueprints",
+      "mcp__ha__ha_manage_pipeline",
+      "mcp__ha__ha_manage_energy_prefs",
+      "mcp__ha__ha_report_issue",
+      "mcp__ha__ha_get_camera_image",
+      "mcp__ha__ha_manage_radio",
+      "mcp__ha__ha_manage_theme",
+      "mcp__ha__ha_config_set_category",
+      "mcp__ha__ha_config_set_label",
+      "mcp__ha__ha_config_set_group",
+      "mcp__ha__ha_config_set_calendar_event"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__ha__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/haushalttickets-agent/venv/bin/haushalttickets-guard",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "DISABLE_AUTOUPDATER": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
