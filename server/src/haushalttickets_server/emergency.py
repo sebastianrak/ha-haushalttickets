@@ -727,10 +727,19 @@ def create_emergency_app(
             client = None
         networks = settings.emergency_networks
         if client is None or not any(client in net for net in networks):
+            _LOGGER.warning("Emergency UI: %s is not in the allowed networks", client)
             return PlainTextResponse("Forbidden", status_code=403)
         if request.method == "POST":
+            # Browsers send "null" for some same-origin forms; forms carry a token
+            # and the session cookie is SameSite=Strict, so only refuse a real
+            # foreign origin here.
             origin = request.headers.get("origin")
-            if origin and urlsplit(origin).netloc != request.headers.get("host"):
+            if (
+                origin
+                and origin != "null"
+                and urlsplit(origin).netloc != request.headers.get("host")
+            ):
+                _LOGGER.warning("Emergency UI: form from foreign origin %s", origin)
                 return PlainTextResponse("Forbidden", status_code=403)
         response: Response = await call_next(request)
         # No HSTS: it would stop browsers from letting you past a self-signed
@@ -741,7 +750,9 @@ def create_emergency_app(
         )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "no-referrer"
+        # "same-origin", not "no-referrer": with the latter browsers send forms with
+        # "Origin: null".
+        response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Cache-Control"] = "no-store"
         return response
 
