@@ -235,6 +235,12 @@ class Runner:
         )
         writes = _read_journal(journal)
         data = result.data or {}
+        if data.get("status") == "implemented" and data.get("objects") and not writes:
+            # The AI reports changes the guard never saw: the hook did not run.
+            self.stats.notes.append(
+                f"#{ticket_id}: guard journal empty although changes are reported - "
+                "check /etc/claude-code/managed-settings.json"
+            )
         objects = list(dict.fromkeys([*(data.get("objects") or []), *_objects(writes)]))
         summary = (data.get("summary") or ticket["title"])[:200]
         after = await self._export(f"#{ticket_id}: {summary}")

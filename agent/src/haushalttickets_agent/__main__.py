@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
+from pathlib import Path
+import subprocess
 import sys
 
 from . import __version__, claude
@@ -63,21 +66,54 @@ async def _probe(config: Config) -> int:
     except Exception as err:  # report every problem
         print(f"Home Assistant (ha-mcp): {type(err).__name__}: {err}")
         ok = False
+    # The guard must deny a forbidden call (exit code 2), whatever Claude does.
+    done = subprocess.run(
+        [str(Path(sys.executable).with_name("haushalttickets-guard"))],
+        input=json.dumps({"tool_name": "mcp__ha__ha_restart", "tool_input": {}}),
+        capture_output=True,
+        text=True,
+        env={"HT_AGENT_PHASE": "implement", "PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+    managed = Path("/etc/claude-code/managed-settings.json")
+    if (
+        done.returncode == 2
+        and managed.exists()
+        and "haushalttickets-guard" in managed.read_text()
+    ):
+        print("Guard: OK (denies, registered in managed settings)")
+    else:
+        print(
+            f"Guard: NOT OK (exit {done.returncode}, managed settings: {managed.exists()})"
+        )
+        ok = False
     config.run_dir.mkdir(parents=True, exist_ok=True)
     result = claude.run(
         config,
         phase="probe",
-        prompt="Antworte nur mit OK.",
-        system_prompt="Antworte nur mit OK.",
+        prompt='Antworte mit {"ok": true}.',
+        system_prompt="Antworte nur im verlangten Format.",
         timeout=180,
         workdir=config.run_dir / "probe",
+        schema=_PROBE_SCHEMA,
     )
-    if result.ok:
-        print(f"Claude: OK ({result.text.strip()[:40]})")
+    if result.ok and result.data is not None and result.data.get("ok") is True:
+        print(f"Claude: OK (structured answer, {result.turns} turn(s))")
+    elif result.ok:
+        print(f"Claude: answers, but not in the requested format: {result.text[:200]}")
+        ok = False
     else:
         print(f"Claude: {result.error}")
         ok = False
     return 0 if ok else 1
+
+
+_PROBE_SCHEMA = {
+    "type": "object",
+    "properties": {"ok": {"type": "boolean"}},
+    "required": ["ok"],
+    "additionalProperties": False,
+}
 
 
 async def _export(config: Config) -> int:

@@ -246,6 +246,20 @@ def test_draft_and_implementation(config: Config) -> None:
     assert [c["phase"] for c in ai.calls] == ["probe", "implement", "draft"]
     assert ai.calls[1]["journal"] is not None
     assert "freigegebener_entwurf" in ai.calls[1]["prompt"]
+    assert not tickets.ended[2]  # no notes: the journal saw the change
+
+
+def test_missing_guard_journal_is_reported(config: Config) -> None:
+    items = [{"kind": "implement", "ticket": ticket(4), "comments": [],
+              "draft": {"version": 1, "created_at": "x", "body": "x"}}]  # fmt: skip
+    answers = [
+        PROBE,
+        {"ok": True, "data": {"status": "implemented", "summary": "s", "comment": "c",
+                              "objects": ["automation.x"], "needs_restart": False}},
+    ]  # fmt: skip
+    runner, tickets, _, _ = make(config, items, answers)
+    asyncio.run(runner.run())
+    assert "guard journal empty" in tickets.ended[2]
 
 
 def test_failed_check_puts_yaml_back(config: Config) -> None:
