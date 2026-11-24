@@ -33,6 +33,13 @@ on phones, invoices for purchases), and a combined history with comments.
 Photos are scaled to at most 2560 px before upload. Home Assistant accepts
 uploads up to 16 MiB.
 
+## Opening a ticket from a link
+
+Add `?ticket=<number>` to the dashboard address, e.g. `/lovelace/tickets?ticket=7`,
+and the card opens that ticket, also when the board is already open. The number is
+then removed from the address, so reloading or going back does not open it again.
+Notifications use this to lead straight to the ticket.
+
 ## Permissions
 
 The card hides controls a person cannot use, but the server decides. A refused

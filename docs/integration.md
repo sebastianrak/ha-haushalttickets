@@ -97,9 +97,9 @@ channel, quiet hours) is up to an automation, so it stays editable in the UI.
 | New ticket, urgency *burning* | all active adults (urgent) |
 | New ticket with assignees, assignees added | the new assignees |
 | Urgency changed to *burning* | all active adults (urgent) |
-| Approval requested | the adults except the requester, with buttons *Approve* / *Decline* |
+| Approval requested | the adults except the requester (with the estimated price) |
 | Approval decided | the requester |
-| Status → acceptance | the requester, with the button *Accept* |
+| Status → acceptance | the requester |
 | Status → done / dream on | the requester |
 | Comment | requester and assignees |
 | Everything else (fields, photos, checklist) | nobody |
@@ -111,26 +111,21 @@ notified, never AI accounts. Changes made through AI tools say so ("… via AI")
 user_id: <HA user id>
 person: person.robin
 kind: approval_requested    # burning, assigned, approved, declined, acceptance, done,
-                            # rejected, comment, due, action_failed
+                            # rejected, comment, due
 title: Approval needed
 message: "#7 Washing machine – by Alex\nestimated €899.00"
-ticket_id: 7
+ticket_id: 7                # null for the due summary
 urgent: false               # true for burning tickets
-actions:                    # for the mobile app; empty for most kinds
-  - action: HAUSHALTTICKETS_APPROVE_7
-    title: Approve
-    authenticationRequired: true
 ```
 
 Texts follow the Home Assistant language (German or English).
 
-### Buttons
+### Opening the ticket
 
-Pass `actions` on to the Home Assistant mobile app (`data.actions`). A tap fires
-`mobile_app_notification_action` for the user of that phone; the integration then
-approves, declines or accepts **as that person**, so the server rules apply to them.
-A refused tap comes back as a notification of kind `action_failed` with the reason.
-Automations cannot do this themselves: they act without a user, as "Automation".
+Notifications have no buttons on purpose: approving a purchase or accepting work
+needs a look at the ticket first. Link them to the dashboard with the card and add
+`?ticket=<ticket_id>`; the card then opens that ticket (see [card](card.md)). The due
+summary has no `ticket_id`; link it to the board.
 
 ### Delivery example
 
@@ -166,9 +161,8 @@ actions:
           title: "{{ n.title }}"
           message: "{{ n.message }}"
           data:
-            url: /lovelace/tickets
+            url: "/lovelace/tickets{{ '?ticket=%s' % n.ticket_id if n.ticket_id else '' }}"
             group: haushalttickets
-            actions: "{{ n.actions }}"
             push:
               interruption-level: >-
                 {{ 'time-sensitive' if n.urgent else ('passive' if quiet else 'active') }}

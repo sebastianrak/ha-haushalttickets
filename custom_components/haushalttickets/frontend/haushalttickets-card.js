@@ -15,7 +15,7 @@
  *
  * MIT-Lizenz
  */
-const HT_VERSION = "0.4.0";
+const HT_VERSION = "0.4.1";
 
 const HT_TEXTE = {
   de: {
@@ -178,17 +178,21 @@ class HaushaltticketsCard extends HTMLElement {
     const erst = !this._hass;
     this._hass = hass;
     this._t = HT_TEXTE[(hass.language || "de").startsWith("de") ? "de" : "en"];
-    if (erst) { this._kopf(); this._laden(); this._abonnieren(); }
+    if (erst) { this._kopf(); this._laden(); this._abonnieren(); this._ausAdresse(); }
   }
 
   getCardSize() { return 8; }
   getGridOptions() { return { columns: "full", min_columns: 6 }; }
 
   connectedCallback() {
+    this._adresse = this._adresse || (() => this._ausAdresse());
+    window.addEventListener("location-changed", this._adresse);
     if (this._hass && !this._abo) { this._abonnieren(); this._laden(); }
+    this._ausAdresse();
   }
 
   disconnectedCallback() {
+    if (this._adresse) window.removeEventListener("location-changed", this._adresse);
     if (this._abo) { this._abo.then((f) => f && f()).catch(() => {}); this._abo = null; }
     if (this._pt) { this._pt.remove(); this._dialog = null; }
   }
@@ -218,6 +222,7 @@ class HaushaltticketsCard extends HTMLElement {
       this._zuAnzahl = zu.count;
       this._geladen = true;
       if (!vorher) this._kopf(); else this._board();
+      if (this._spaeter) { const id = this._spaeter; this._spaeter = null; this._oeffnen(id); }
     } catch (e) {
       this._fehler(this._t.keinZugriff + " (" + (e.message || e.code || e) + ")");
     } finally {
@@ -458,6 +463,18 @@ class HaushaltticketsCard extends HTMLElement {
   }
 
   // ---------- Dialog ----------
+  // Link aus einer Benachrichtigung („…?ticket=7“): Ticket direkt öffnen und die
+  // Nummer aus der Adresse nehmen, damit Neuladen oder Zurück es nicht erneut öffnet
+  _ausAdresse() {
+    if (!this._hass || !this.isConnected) return;
+    const url = new URL(window.location.href);
+    const id = Number(url.searchParams.get("ticket"));
+    if (!Number.isInteger(id) || id < 1) return;
+    url.searchParams.delete("ticket");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    if (this._geladen) this._oeffnen(id); else this._spaeter = id;   // Dialog braucht die Mitglieder
+  }
+
   async _oeffnen(id) {
     const neu = id == null;
     const ueber = this._portal();

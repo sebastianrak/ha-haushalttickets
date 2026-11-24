@@ -1,4 +1,4 @@
-"""Who hears about what, buttons in app notifications and due reminders."""
+"""Who hears about what, and due reminders."""
 
 from __future__ import annotations
 
@@ -10,11 +10,7 @@ from pytest_homeassistant_custom_component.common import (
     async_capture_events,
 )
 
-from custom_components.haushalttickets.const import (
-    DOMAIN,
-    EVENT_NOTIFICATION,
-    EVENT_NOTIFICATION_ACTION,
-)
+from custom_components.haushalttickets.const import DOMAIN, EVENT_NOTIFICATION
 from custom_components.haushalttickets.coordinator import TicketData
 from custom_components.haushalttickets.notifications import (
     due_notifications,
@@ -99,8 +95,8 @@ def test_assignment_and_own_actions() -> None:
     assert set(_by_person(notifications_for(event, DATA, "de"))) == {"person.kind"}
 
 
-def test_approval_goes_to_the_other_adults_with_buttons() -> None:
-    """Approval: adults except the requester; approve/decline need an unlocked phone."""
+def test_approval_goes_to_the_other_adults() -> None:
+    """Approval: adults except the requester, with the price; decided in the ticket."""
     event = _event(
         "approval_requested",
         "robin",
@@ -111,12 +107,8 @@ def test_approval_goes_to_the_other_adults_with_buttons() -> None:
     assert set(sent) == {"person.alex"}
     alex = sent["person.alex"]
     assert alex.message == f"#7 Spülmaschine {DASH} von Robin\ngeschätzt 899,00 €"
-    assert [a["action"] for a in alex.actions] == [
-        "HAUSHALTTICKETS_APPROVE_7",
-        "HAUSHALTTICKETS_DECLINE_7",
-    ]
-    assert all(a["authenticationRequired"] for a in alex.actions)
-    assert alex.actions[1]["destructive"]
+    assert alex.ticket_id == 7
+    assert "actions" not in alex.as_event()
 
     decided = _event(
         "approval_decided", "alex", {"decision": "declined"}, requested_by_id="robin"
@@ -126,11 +118,12 @@ def test_approval_goes_to_the_other_adults_with_buttons() -> None:
 
 
 def test_status_changes_reach_the_requester() -> None:
-    """Acceptance (with a button), done and dream-on go to the requester only."""
+    """Acceptance, done and dream-on go to the requester only."""
     acceptance = _event("status_changed", "kind", {"new": "acceptance"})
     alex = _by_person(notifications_for(acceptance, DATA, "de"))["person.alex"]
     assert alex.kind == "acceptance"
-    assert alex.actions[0]["action"] == "HAUSHALTTICKETS_DONE_7"
+    assert alex.title == "Bitte abnehmen"
+    assert alex.as_event()["ticket_id"] == 7
 
     in_progress = _event("status_changed", "kind", {"new": "in_progress"})
     assert notifications_for(in_progress, DATA, "de") == []
@@ -210,22 +203,15 @@ async def _settle(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     await hass.async_block_till_done()
 
 
-async def _tap(hass: HomeAssistant, user_id: str, action: str) -> None:
-    hass.bus.async_fire(
-        EVENT_NOTIFICATION_ACTION, {"action": action}, context=Context(user_id=user_id)
-    )
-    await hass.async_block_till_done()
-
-
-async def test_approve_from_the_notification(
+async def test_approval_and_acceptance_events(
     hass: HomeAssistant, loaded: MockConfigEntry, household: Household
 ) -> None:
-    """Robin's purchase asks Alex; Alex approves with the button, Robin hears back."""
+    """Robin's purchase asks Alex; Robin's finished work asks Alex to accept."""
     await _call(
         hass, "set_role", household.alex.id, person="person.robin", role="adult"
     )
     sent = async_capture_events(hass, EVENT_NOTIFICATION)
-    ticket = await _call(
+    purchase = await _call(
         hass,
         "create_ticket",
         household.robin.id,
@@ -233,47 +219,7 @@ async def test_approve_from_the_notification(
         title="Waschmaschine",
         extra_fields={"price_estimated": "899.00"},
     )
-    await _settle(hass, loaded)
-    ask = [e.data for e in sent if e.data["kind"] == "approval_requested"]
-    assert len(ask) == 1
-    assert ask[0]["person"] == "person.alex"
-    assert ask[0]["actions"][0]["action"] == f"HAUSHALTTICKETS_APPROVE_{ticket['id']}"
-
-    # Robin cannot approve his own purchase: he is told why, nothing changes.
-    sent.clear()
-    await _tap(hass, household.robin.id, f"HAUSHALTTICKETS_APPROVE_{ticket['id']}")
-    failed = [e.data for e in sent if e.data["kind"] == "action_failed"]
-    assert len(failed) == 1
-    assert failed[0]["person"] == "person.robin"
-    assert "other adult" in failed[0]["message"]
-
-    sent.clear()
-    await _tap(hass, household.alex.id, f"HAUSHALTTICKETS_APPROVE_{ticket['id']}")
-    await _settle(hass, loaded)
-    client = loaded.runtime_data.client
-    assert (await client.ticket(ticket["id"]))["approval_state"] == "approved"
-    back = [e.data for e in sent if e.data["kind"] == "approved"]
-    assert [n["person"] for n in back] == ["person.robin"]
-
-    # Unknown actions and taps without a user are ignored.
-    sent.clear()
-    await _tap(hass, household.alex.id, "SOMETHING_ELSE")
-    hass.bus.async_fire(
-        EVENT_NOTIFICATION_ACTION, {"action": f"HAUSHALTTICKETS_DECLINE_{ticket['id']}"}
-    )
-    await hass.async_block_till_done()
-    assert sent == []
-
-
-async def test_accept_from_the_notification(
-    hass: HomeAssistant, loaded: MockConfigEntry, household: Household
-) -> None:
-    """Robin reports done, Alex accepts with the button."""
-    await _call(
-        hass, "set_role", household.alex.id, person="person.robin", role="adult"
-    )
-    sent = async_capture_events(hass, EVENT_NOTIFICATION)
-    ticket = await _call(
+    repair = await _call(
         hass,
         "create_ticket",
         household.alex.id,
@@ -284,17 +230,15 @@ async def test_accept_from_the_notification(
         hass,
         "set_status",
         household.robin.id,
-        ticket_id=ticket["id"],
+        ticket_id=repair["id"],
         status="acceptance",
     )
     await _settle(hass, loaded)
-    kinds = {(e.data["person"], e.data["kind"]) for e in sent}
-    assert ("person.robin", "assigned") in kinds
-    assert ("person.alex", "acceptance") in kinds
-
-    await _tap(hass, household.alex.id, f"HAUSHALTTICKETS_DONE_{ticket['id']}")
-    await _settle(hass, loaded)
-    assert (await loaded.runtime_data.client.ticket(ticket["id"]))["status"] == "done"
+    got = {(e.data["person"], e.data["kind"], e.data["ticket_id"]) for e in sent}
+    assert ("person.alex", "approval_requested", purchase["id"]) in got
+    assert ("person.robin", "assigned", repair["id"]) in got
+    assert ("person.alex", "acceptance", repair["id"]) in got
+    assert all("actions" not in e.data for e in sent)
 
 
 async def test_send_due_reminders(
