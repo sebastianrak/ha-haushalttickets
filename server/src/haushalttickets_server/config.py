@@ -41,19 +41,35 @@ class Settings(BaseSettings):
     # looks for rounds to create every so many minutes (0 = only on changes).
     timezone: str = "Europe/Berlin"
     recurrence_minutes: int = 15
+    # Emergency web UI (HTTPS on its own port) for when Home Assistant is down. It is
+    # off while this is empty: comma-separated addresses or networks that may open it,
+    # e.g. "172.16.0.0/16,100.64.0.0/10".
+    emergency_clients: str = ""
+    emergency_port: int = 8443
+    tls_dir: Path = Path("/var/lib/haushalttickets/tls")
+    # Language of tickets the server files itself (e.g. "renew the certificate").
+    language: str = "de"
 
-    @field_validator("allowed_clients")
+    @field_validator("allowed_clients", "emergency_clients")
     @classmethod
-    def _validate_allowed_clients(cls, value: str) -> str:
-        for part in filter(None, (p.strip() for p in value.split(","))):
-            ip_network(part, strict=False)
+    def _validate_networks(cls, value: str) -> str:
+        _networks(value)
         return value
 
     @cached_property
     def allowed_networks(self) -> list[IPv4Network | IPv6Network]:
         """Parsed ``allowed_clients``."""
-        return [
-            ip_network(part, strict=False)
-            for part in (p.strip() for p in self.allowed_clients.split(","))
-            if part
-        ]
+        return _networks(self.allowed_clients)
+
+    @cached_property
+    def emergency_networks(self) -> list[IPv4Network | IPv6Network]:
+        """Parsed ``emergency_clients``."""
+        return _networks(self.emergency_clients)
+
+
+def _networks(value: str) -> list[IPv4Network | IPv6Network]:
+    return [
+        ip_network(part, strict=False)
+        for part in (p.strip() for p in value.split(","))
+        if part
+    ]
