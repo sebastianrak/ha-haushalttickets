@@ -26,6 +26,7 @@ def ha_whoami() -> dict:
         "url": os.environ.get("HOMEASSISTANT_URL"),
         "yaml": os.environ.get("ENABLE_YAML_CONFIG_EDITING"),
         "confirm": os.environ.get("ENABLE_YAML_EDIT_CONFIRM"),
+        "cwd": os.getcwd(),
     }
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, suppress
 import json
 import os
 from pathlib import Path
@@ -89,13 +89,23 @@ class HaMcp:
             command=self.config.ha_mcp_command[0],
             args=self.config.ha_mcp_command[1:],
             env=server_env(self.config, yaml_edit=self.yaml_edit, confirm=False),
+            # ha-mcp reads a .env from its working directory; never inherit one
+            # it may not read (e.g. /root when started by haushalttickets-agent-ctl).
+            cwd=str(self.config.state_dir),
         )
         self._stack = AsyncExitStack()
-        read, write = await self._stack.enter_async_context(stdio_client(params))
-        self._session = await self._stack.enter_async_context(
-            ClientSession(read, write)
-        )
-        await self._session.initialize()
+        try:
+            read, write = await self._stack.enter_async_context(stdio_client(params))
+            self._session = await self._stack.enter_async_context(
+                ClientSession(read, write)
+            )
+            await self._session.initialize()
+        except BaseException:
+            # Close in this task; otherwise asyncio complains at shutdown.
+            with suppress(Exception):
+                await self._stack.aclose()
+            self._stack = None
+            raise
         return self
 
     async def __aexit__(self, *exc: object) -> None:

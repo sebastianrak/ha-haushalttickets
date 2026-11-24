@@ -21,6 +21,8 @@ CLAUDE="$STATE_DIR/.local/bin/claude"
 die() { echo "Error: $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "run as root"
 [[ -f $ENV_FILE ]] || die "$ENV_FILE not found (install-agent.sh first)"
+# Commands run as the agent user; start them in its own directory, not in /root.
+cd "$STATE_DIR"
 
 setting() { grep -Po "^$1=\K.*" "$ENV_FILE" 2>/dev/null || true; }
 
