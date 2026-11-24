@@ -41,6 +41,7 @@ def test_ha_mcp_client(tmp_path: Path) -> None:
                 "yaml": "false",
                 "confirm": "false",
                 "cwd": str(tmp_path),
+                "settings_ui": "true",
             }
             with pytest.raises(HaMcpError):
                 await ha.call("ha_fails")
