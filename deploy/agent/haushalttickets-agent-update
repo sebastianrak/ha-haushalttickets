@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Update the nightly run (runner, ha-mcp, settings, tools) inside the agent container.
+#   haushalttickets-agent-update                    # latest GitHub release
+#   haushalttickets-agent-update --release v0.8.0   # a given release
+#   haushalttickets-agent-update --ref main         # a branch or tag (from git)
+#   haushalttickets-agent-update --source DIR       # a local checkout
+#   haushalttickets-agent-update --claude           # also update Claude Code
+# Release assets are verified against AGENT-SHA256SUMS, dependencies against hashes.
+set -euo pipefail
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+unset LANGUAGE
+
+REPO="sebastianrak/ha-haushalttickets"
+APP_DIR="/opt/haushalttickets-agent"
+STATE_DIR="/var/lib/haushalttickets-agent"
+MODE="release"
+TARGET="latest"
+CLAUDE=0
+FILES=(agent-requirements.txt ha-mcp-requirements.txt managed-settings.json
+  haushalttickets-nightly.service haushalttickets-nightly.timer
+  haushalttickets-agent-ctl haushalttickets-agent-update)
+
+die() { echo "Error: $*" >&2; exit 1; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --release) MODE="release"; TARGET="$2"; shift 2 ;;
+    --ref) MODE="ref"; TARGET="$2"; shift 2 ;;
+    --source) MODE="source"; TARGET="$2"; shift 2 ;;
+    --claude) CLAUDE=1; shift ;;
+    -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
+    *) die "unknown option $1" ;;
+  esac
+done
+[[ $EUID -eq 0 ]] || die "run as root"
+[[ -x $APP_DIR/venv/bin/python ]] || die "not installed (install-agent.sh first)"
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+D="$WORK/files"
+mkdir -p "$D"
+
+case "$MODE" in
+  release)
+    if [[ $TARGET == latest ]]; then
+      api="https://api.github.com/repos/$REPO/releases/latest"
+    else
+      api="https://api.github.com/repos/$REPO/releases/tags/$TARGET"
+    fi
+    curl -fsSL "$api" -o "$WORK/release.json" || die "release $TARGET not found"
+    python3 - "$WORK/release.json" "${FILES[@]}" >"$WORK/assets" <<'EOF'
+import json, sys
+wanted = set(sys.argv[2:]) | {"AGENT-SHA256SUMS"}
+for asset in json.load(open(sys.argv[1]))["assets"]:
+    name = asset["name"]
+    if name in wanted or (name.startswith("haushalttickets_agent-") and name.endswith(".whl")):
+        print(name, asset["browser_download_url"])
+EOF
+    while read -r name url; do
+      curl -fsSL "$url" -o "$D/$name"
+    done <"$WORK/assets"
+    [[ -f $D/AGENT-SHA256SUMS ]] || die "release has no nightly run (AGENT-SHA256SUMS missing)"
+    (cd "$D" && sha256sum --check --quiet AGENT-SHA256SUMS) || die "checksum mismatch"
+    for name in "${FILES[@]}"; do [[ -f $D/$name ]] || die "release is missing $name"; done
+    PACKAGE=$(find "$D" -maxdepth 1 -name 'haushalttickets_agent-*.whl' | head -n1)
+    [[ -n $PACKAGE ]] || die "release has no agent wheel"
+    ;;
+  ref | source)
+    if [[ $MODE == ref ]]; then
+      git clone --quiet --depth 1 --branch "$TARGET" "https://github.com/$REPO" "$WORK/src"
+      SRC="$WORK/src"
+    else
+      SRC="$TARGET"
+    fi
+    cp "$SRC/agent/requirements.txt" "$D/agent-requirements.txt"
+    cp "$SRC/deploy/agent/ha-mcp-requirements.txt" "$SRC/deploy/agent/managed-settings.json" \
+      "$SRC/deploy/agent/systemd/haushalttickets-nightly.service" \
+      "$SRC/deploy/agent/systemd/haushalttickets-nightly.timer" \
+      "$SRC/deploy/agent/haushalttickets-agent-ctl" "$SRC/deploy/agent/haushalttickets-agent-update" "$D/"
+    PACKAGE="$SRC/agent"
+    ;;
+esac
+
+version() { "$APP_DIR/venv/bin/python" -c 'import haushalttickets_agent as m; print(m.__version__)' 2>/dev/null || echo none; }
+BEFORE=$(version)
+
+echo "==> Runner"
+"$APP_DIR/venv/bin/pip" install --quiet --disable-pip-version-check --require-hashes -r "$D/agent-requirements.txt"
+"$APP_DIR/venv/bin/pip" install --quiet --disable-pip-version-check --no-deps --force-reinstall "$PACKAGE"
+
+echo "==> ha-mcp"
+"$APP_DIR/ha-mcp/bin/pip" install --quiet --disable-pip-version-check --require-hashes -r "$D/ha-mcp-requirements.txt"
+
+echo "==> Settings, units, tools"
+install -m 0644 "$D/managed-settings.json" /etc/claude-code/managed-settings.json
+install -m 0644 "$D/haushalttickets-nightly.service" "$D/haushalttickets-nightly.timer" /etc/systemd/system/
+[[ -d /run/systemd/system ]] && systemctl daemon-reload
+# Rename over the tools: bash keeps reading this running script from the old file.
+for tool in haushalttickets-agent-ctl haushalttickets-agent-update; do
+  tmp=$(mktemp "/usr/local/sbin/.$tool.XXXXXX")
+  install -m 0755 "$D/$tool" "$tmp"
+  mv -f "$tmp" "/usr/local/sbin/$tool"
+done
+
+if [[ $CLAUDE -eq 1 ]]; then
+  echo "==> Claude Code"
+  runuser -u hausmeister -- env HOME="$STATE_DIR" "$STATE_DIR/.local/bin/claude" update
+fi
+
+echo "Nightly run $BEFORE -> $(version)"

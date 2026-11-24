@@ -6,10 +6,12 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 ignore = ["E501"]
 
 [lint.isort]
-known-first-party = ["haushalttickets_server", "custom_components"]
+known-first-party = ["haushalttickets_server", "haushalttickets_agent", "custom_components"]
 force-sort-within-sections = true
 combine-as-imports = true
 
 [lint.per-file-ignores]
 # German and English page texts use typographic dashes on purpose.
 "server/src/haushalttickets_server/emergency.py" = ["RUF001"]
+"agent/src/haushalttickets_agent/prompts.py" = ["RUF001"]
+"agent/src/haushalttickets_agent/runner.py" = ["RUF001"]

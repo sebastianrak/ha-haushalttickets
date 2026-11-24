@@ -1,0 +1,29 @@
+[Unit]
+Description=Haushalttickets nightly AI run (KI-Hausmeister)
+Documentation=https://github.com/sebastianrak/ha-haushalttickets/blob/main/deploy/agent/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hausmeister
+Group=hausmeister
+EnvironmentFile=/etc/haushalttickets-agent/agent.env
+Environment=HOME=/var/lib/haushalttickets-agent
+Environment=PATH=/var/lib/haushalttickets-agent/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=LANG=C.UTF-8
+WorkingDirectory=/var/lib/haushalttickets-agent
+ExecStart=/opt/haushalttickets-agent/venv/bin/haushalttickets-nightly run
+# The runner stops itself after HT_AGENT_TIME_LIMIT_MINUTES; this is the backstop.
+TimeoutStartSec=150min
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/haushalttickets-agent
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0077

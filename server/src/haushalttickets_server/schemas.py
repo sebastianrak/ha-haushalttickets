@@ -165,6 +165,7 @@ class TicketOut(_Out):
     ai_implement_approved: bool
     ai_implement_approved_by_id: str | None
     ai_implement_approved_at: datetime | None
+    ai_implement_draft_version: int | None = None
     price_estimated: Decimal | None
     price_actual: Decimal | None
     product_url: str | None
@@ -188,6 +189,8 @@ class TicketOut(_Out):
     comment_count: int = 0
     attachment_count: int = 0
     cover_attachment_id: str | None = None
+    # Newest AI draft (None: no draft yet).
+    latest_draft_version: int | None = None
 
 
 class TicketList(BaseModel):
@@ -364,3 +367,79 @@ class SettingsOut(BaseModel):
 
 class SettingsPatch(_In):
     purchase_approval_threshold: Amount | None = None
+
+
+# Nightly run (AI drafts and changes)
+
+DraftText = Annotated[str, Field(min_length=1, max_length=100_000)]
+NightlyComment = Annotated[str, Field(min_length=1, max_length=20_000)]
+
+
+class DraftOut(_Out):
+    id: int
+    ticket_id: int
+    version: int
+    body: str
+    run_id: int | None
+    created_at: datetime
+
+
+class ChangeIn(_In):
+    summary: Annotated[str, Field(min_length=1, max_length=5000)]
+    objects: list[Annotated[str, Field(max_length=255)]] = Field(
+        default_factory=list, max_length=200
+    )
+    git_commit: Annotated[str | None, Field(max_length=64)] = None
+    needs_restart: bool = False
+
+
+class ChangeOut(_Out):
+    id: int
+    ticket_id: int
+    run_id: int | None
+    summary: str
+    objects: list[str]
+    git_commit: str | None
+    needs_restart: bool
+    created_at: datetime
+
+
+class NightlyWorkItem(BaseModel):
+    kind: Literal["implement", "draft"]
+    ticket: TicketOut
+    comments: list[CommentOut]
+    # implement: the approved draft; draft: the newest draft to revise (if any).
+    draft: DraftOut | None
+
+
+class NightlyWork(BaseModel):
+    items: list[NightlyWorkItem]
+
+
+class RunOut(_Out):
+    id: int
+    started_at: datetime
+    ended_at: datetime | None
+    outcome: str | None
+    tickets: list[int]
+    notes: str
+    results: list[dict[str, Any]]
+    usage: dict[str, Any]
+
+
+class RunEnd(_In):
+    outcome: Literal["no_work", "quota_low", "done", "failed", "aborted"]
+    notes: Annotated[str, Field(max_length=20_000)] = ""
+    usage: dict[str, Any] = Field(default_factory=dict)
+
+
+class NightlyResult(_In):
+    run_id: int
+    kind: Literal["draft", "implemented", "failed"]
+    comment: NightlyComment
+    draft: DraftText | None = None
+    change: ChangeIn | None = None
+    # failed: which step failed, and whether to try again next night (e.g. when the
+    # usage limit cut the run short) instead of clearing the request.
+    phase: Literal["draft", "implement"] | None = None
+    retry: bool = False

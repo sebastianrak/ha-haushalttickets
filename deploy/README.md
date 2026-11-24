@@ -109,6 +109,14 @@ systemctl restart haushalttickets               # after --remove-custom / --rene
 
 To switch the emergency UI off, empty `HAUSHALTTICKETS_EMERGENCY_CLIENTS` and restart.
 
+## Nightly run
+
+The nightly AI run lives in its own container, see [agent/README.md](agent/README.md).
+In this container, `haushalttickets-ctl nightly-setup` adds the agent container's
+address to `HAUSHALTTICKETS_ALLOWED_CLIENTS` (restarting the server) and prints the
+runner token for the AI account. `haushalttickets-ctl nightly status` shows the last
+run and how many tickets wait.
+
 ## Publishing a release
 
 Push a tag (`git tag v0.4.0 && git push origin v0.4.0`) or create the release in the

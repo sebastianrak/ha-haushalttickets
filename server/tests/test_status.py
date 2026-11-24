@@ -46,7 +46,8 @@ def test_reject_and_reopen(api: Api) -> None:
 
 def test_ai_limits(api: Api) -> None:
     create(api, "robin")
-    for name, via in (("alex", "mcp"), ("alex", "nightly_run"), ("ki", "ui")):
+    # via=nightly_run belongs to the runner token (test_nightly.py).
+    for name, via in (("alex", "mcp"), ("ki", "ui")):
         assert move(api, name, "in_progress", via=via).status_code == 200
         assert move(api, name, "acceptance", via=via).status_code == 200
         assert error_code(move(api, name, "done", via=via)) == "ai_status_forbidden"

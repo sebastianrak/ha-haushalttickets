@@ -1,0 +1,10 @@
+[Unit]
+Description=Haushalttickets nightly AI run at 03:00 (decision 12d)
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# A missed night is not made up during the day (it would use the day's usage).
+Persistent=false
+
+[Install]
+WantedBy=timers.target

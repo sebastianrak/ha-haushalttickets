@@ -111,6 +111,8 @@ class RunOutcome(StrEnum):
     QUOTA_LOW = "quota_low"
     DONE = "done"
     FAILED = "failed"
+    # The time limit ended the run before all tickets were worked on.
+    ABORTED = "aborted"
 
 
 class EventType(StrEnum):
@@ -129,3 +131,11 @@ class EventType(StrEnum):
     CHECKLIST_CHANGED = "checklist_changed"
     # A recurring series was created, changed, paused or ended (payload: action).
     SERIES_CHANGED = "series_changed"
+    # The nightly run stored a new draft version for a ticket.
+    DRAFT_CREATED = "draft_created"
+    # The nightly run recorded a change to Home Assistant (change log entry).
+    CHANGE_LOGGED = "change_logged"
+    # A nightly run ended (payload: outcome, results per ticket).
+    NIGHTLY_RUN_FINISHED = "nightly_run_finished"
+    # Tickets wait for the nightly run, but none started for too long.
+    NIGHTLY_RUN_MISSING = "nightly_run_missing"

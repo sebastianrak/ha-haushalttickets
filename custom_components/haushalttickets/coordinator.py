@@ -156,7 +156,7 @@ class HaushaltticketsCoordinator(DataUpdateCoordinator[TicketData]):
             self.hass.bus.async_fire(EVENT_TICKET, bus_event)
             comment = (
                 await self._async_comment(event)
-                if event["type"] == "comment_added"
+                if event["type"] == "comment_added" and event["via"] != "nightly_run"
                 else None
             )
             fire(

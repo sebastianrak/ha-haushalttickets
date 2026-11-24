@@ -3,8 +3,9 @@
 #   haushalttickets-ctl migrate
 #   haushalttickets-ctl token create homeassistant
 #   haushalttickets-ctl emergency cert
-# and, as root, set up the emergency web UI in one go:
+# and, as root, set up the emergency web UI or the nightly run in one go:
 #   haushalttickets-ctl emergency-setup
+#   haushalttickets-ctl nightly-setup
 set -euo pipefail
 # `pct enter` passes the Proxmox host's locale (e.g. en_US.UTF-8), which the container
 # does not have; C.UTF-8 always exists.
@@ -66,6 +67,34 @@ The browser warns about the self-signed certificate the first time: compare the
 SHA-256 fingerprint above, or upload your own certificate on the page "Certificate".
 EOF
 }
+
+nightly_setup() {
+  [[ $EUID -eq 0 ]] || die "run as root"
+  [[ -f $ENV_FILE ]] || die "$ENV_FILE not found"
+  local address user clients
+  echo "Address of the agent container (KI-Hausmeister), e.g. 172.16.3.22"
+  read -r -p "Address: " address
+  python3 -c 'import ipaddress, sys; ipaddress.ip_address(sys.argv[1])' "$address" 2>/dev/null ||
+    die "not an address: $address"
+  clients=$(setting ALLOWED_CLIENTS)
+  if [[ -z $clients ]]; then
+    echo "Note: HAUSHALTTICKETS_ALLOWED_CLIENTS is empty, every address may use the API."
+  elif [[ ,$clients, != *",$address,"* ]]; then
+    set_setting ALLOWED_CLIENTS "$clients,$address"
+    echo "==> Allowed clients: $clients,$address (restarting the server, ~5 s)"
+    systemctl restart haushalttickets
+  fi
+  read -r -p "AI account in Home Assistant [KI-Hausmeister]: " user
+  echo "==> Runner token (shown once; enter it in the agent container)"
+  cd /var/lib/haushalttickets
+  "${SERVER[@]}" nightly token --user "${user:-KI-Hausmeister}"
+}
+
+if [[ ${1:-} == nightly-setup ]]; then
+  shift
+  nightly_setup
+  exit 0
+fi
 
 if [[ ${1:-} == emergency-setup ]]; then
   shift

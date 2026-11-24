@@ -50,6 +50,18 @@ TEXTS: dict[str, dict[str, str]] = {
         "today": "Heute",
         "tomorrow": "Morgen",
         "automation": "Automation",
+        "nightly": "KI-Hausmeister: Nachtlauf",
+        "nightly_problem": "KI-Hausmeister: Problem im Nachtlauf",
+        "nightly_missing": "KI-Hausmeister: kein Nachtlauf",
+        "r_draft": "Entwurf v{version} bereit",
+        "r_implemented": "umgesetzt {dash} bitte abnehmen",
+        "r_restart": " (wirksam erst nach Neuladen/Neustart)",
+        "r_failed": "nicht geschafft",
+        "r_retry": "nicht geschafft, nächste Nacht erneut",
+        "o_failed": "Der Nachtlauf ist gescheitert.",
+        "o_quota_low": "Der Nachtlauf hat am Nutzungslimit aufgehört.",
+        "o_aborted": "Der Nachtlauf hat die Zeitgrenze erreicht; offene Tickets folgen nächste Nacht.",
+        "missing": "Seit über {hours} h kein Nachtlauf, {pending} Ticket(s) warten.",
     },
     "en": {
         "burning": "🔥 Urgent",
@@ -72,6 +84,18 @@ TEXTS: dict[str, dict[str, str]] = {
         "today": "Today",
         "tomorrow": "Tomorrow",
         "automation": "Automation",
+        "nightly": "AI caretaker: nightly run",
+        "nightly_problem": "AI caretaker: problem in the nightly run",
+        "nightly_missing": "AI caretaker: no nightly run",
+        "r_draft": "draft v{version} ready",
+        "r_implemented": "implemented {dash} please review",
+        "r_restart": " (takes effect after a reload/restart)",
+        "r_failed": "not done",
+        "r_retry": "not done, trying again next night",
+        "o_failed": "The nightly run failed.",
+        "o_quota_low": "The nightly run stopped at the usage limit.",
+        "o_aborted": "The nightly run hit its time limit; the rest follows next night.",
+        "missing": "No nightly run for over {hours} h, {pending} ticket(s) waiting.",
     },
 }
 
@@ -122,6 +146,13 @@ class _Builder:
         if not user or not user.get("active", True) or user.get("role") == "ai_agent":
             return None
         return user.get("ha_person_entity_id")
+
+    def admins(self) -> list[str]:
+        return [
+            user_id
+            for user_id, user in self.data.users.items()
+            if user.get("role") == "admin"
+        ]
 
     def adults(self) -> list[str]:
         return [
@@ -186,6 +217,17 @@ def notifications_for(
 
     build = _Builder(data, texts, actor_id)
     kind = event.get("type")
+    if kind == "nightly_run_finished":
+        return _nightly_summary(build, payload)
+    if kind == "nightly_run_missing":
+        message = texts["missing"].format(
+            hours=payload.get("hours", "?"), pending=payload.get("pending", "?")
+        )
+        build.add(build.admins(), "nightly_missing", message, None)
+        return list(build.out.values())
+    if event.get("via") == "nightly_run":
+        # The nightly run reports once per person when it ends (decision 53).
+        return []
     if kind == "ticket_created" and event.get("via") == "recurrence":
         # A new round of a series: nobody did anything, so say when it is due.
         due = ticket.get("due_date") or payload.get("due_date")
@@ -253,6 +295,58 @@ def notifications_for(
                 short = short[: _COMMENT_PREVIEW - 1] + "…"
             message = f"{message}: {short}"
         build.add([requester, *assignees], "comment", message, ticket_id)
+    return list(build.out.values())
+
+
+def _result_line(texts: dict[str, str], result: dict[str, Any]) -> str:
+    kind = result.get("kind")
+    if kind == "draft":
+        text = texts["r_draft"].format(version=result.get("version", "?"))
+    elif kind == "implemented":
+        text = texts["r_implemented"].format(dash=_DASH)
+        if result.get("needs_restart"):
+            text += texts["r_restart"]
+    else:
+        text = texts["r_retry"] if result.get("retry") else texts["r_failed"]
+    return f"#{result.get('ticket_id')} {result.get('title', '')} {_DASH} {text}"
+
+
+def _nightly_summary(build: _Builder, payload: dict[str, Any]) -> list[Notification]:
+    """One message per person concerned; admins also hear about problems."""
+    texts = build.texts
+    lines: dict[str, list[str]] = {}
+    tickets: dict[str, set[int]] = {}
+    for result in payload.get("results") or []:
+        line = _result_line(texts, result)
+        for user_id in {
+            result.get("requested_by_id"),
+            *(result.get("assignee_ids") or []),
+        }:
+            if user_id:
+                lines.setdefault(user_id, []).append(line)
+                tickets.setdefault(user_id, set()).add(result.get("ticket_id"))
+    problems: list[str] = []
+    outcome = payload.get("outcome")
+    if f"o_{outcome}" in texts:
+        problems.append(texts[f"o_{outcome}"])
+        if payload.get("notes"):
+            problems.append(str(payload["notes"]))
+    failed = [r for r in payload.get("results") or [] if r.get("kind") == "failed"]
+    for user_id in build.admins() if (problems or failed) else []:
+        own = lines.get(user_id, [])
+        extra = [_result_line(texts, r) for r in failed]
+        lines[user_id] = problems + own + [x for x in extra if x not in own]
+        tickets.setdefault(user_id, set()).update(r.get("ticket_id") for r in failed)
+    for user_id, user_lines in lines.items():
+        own_tickets = tickets.get(user_id) or set()
+        build.add(
+            [user_id],
+            "nightly_problem"
+            if (problems or failed) and user_id in build.admins()
+            else "nightly",
+            "\n".join(user_lines),
+            next(iter(own_tickets)) if len(own_tickets) == 1 else None,
+        )
     return list(build.out.values())
 
 

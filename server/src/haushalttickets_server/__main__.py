@@ -1,7 +1,8 @@
-"""Command line: ``haushalttickets-server [serve|migrate|recur|token|emergency ...]``."""
+"""Command line: ``haushalttickets-server [serve|migrate|recur|token|emergency|nightly]``."""
 
 import argparse
 import getpass
+import json
 import sys
 
 from .config import Settings
@@ -29,6 +30,14 @@ def main(argv: list[str] | None = None) -> int:
     cert.add_argument(
         "--remove-custom", action="store_true", help="delete the own certificate"
     )
+    night = sub.add_parser("nightly", help="nightly AI run")
+    night_sub = night.add_subparsers(dest="action", required=True)
+    night_token = night_sub.add_parser(
+        "token", help="create (or replace) the runner token for the AI account"
+    )
+    night_token.add_argument("--user", required=True, help="AI account (id or name)")
+    night_sub.add_parser("revoke", help="remove the runner token")
+    night_sub.add_parser("status", help="token, last run and waiting tickets")
     args = parser.parse_args(argv)
     settings = Settings()
 
@@ -62,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "emergency":
         return _emergency_password(factory, args.user)
+    if args.command == "nightly":
+        return _nightly(factory, args)
     with factory() as session:
         try:
             if args.action == "create":
@@ -69,6 +80,31 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 revoke_token(session, args.name)
             session.commit()
+        except (Invalid, NotFound) as err:
+            print(err, file=sys.stderr)
+            return 1
+    return 0
+
+
+def _nightly(factory, args: argparse.Namespace) -> int:
+    from . import nightly
+
+    with factory() as session:
+        try:
+            if args.action == "token":
+                user, value = nightly.create_access(session, args.user)
+                session.commit()
+                print(value)
+                print(
+                    f"Runner token for {user.display_name}; any older one is void.",
+                    file=sys.stderr,
+                )
+            elif args.action == "revoke":
+                nightly.revoke_access(session)
+                session.commit()
+                print("Runner token removed.")
+            else:
+                print(json.dumps(nightly.status(session), indent=2, default=str))
         except (Invalid, NotFound) as err:
             print(err, file=sys.stderr)
             return 1
