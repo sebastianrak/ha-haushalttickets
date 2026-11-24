@@ -13,8 +13,10 @@ Use it in a panel view or a full-width section.
 
 ## Board
 
-- Six columns: Neue Tickets, Wird beredet, In Arbeit, Abnahme, Erledigt, Träum weiter.
-  "Wartet auf Teile" is a marker on tickets in "In Arbeit".
+- Six columns: Offen, Wird beredet, In Arbeit, Abnahme, Erledigt, Träum weiter.
+  "Wartet auf Teile" is a marker on tickets in "In Arbeit". A purchase that needs
+  approval moves to "Wird beredet" by itself and, once decided, to "Offen" or
+  "Träum weiter".
 - Filters: everyone / mine / per person, ticket type, text search.
 - Tiles: type icon, number, title, assignees, urgency, waiting marker, purchase
   approval, due date, hearts, comment and attachment counts, the requester in
@@ -51,4 +53,4 @@ Based on the ticket board by Kily's World
 ([johnkily/ha-blueprints](https://github.com/johnkily/ha-blueprints), MIT) including
 the local changes p1–p6 (tab bar on phones, dialog as full-screen portal with fixed
 footer, two-step delete, notifications instead of alerts, touch without drag and
-drop, "Neue Tickets").
+drop, renamed first column – "Offen" since 0.5.0).

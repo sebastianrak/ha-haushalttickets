@@ -117,7 +117,7 @@
     },
     "status": {
       "options": {
-        "new": "New",
+        "new": "Open",
         "discussing": "Discussing",
         "in_progress": "In progress",
         "waiting_for_parts": "Waiting for parts",

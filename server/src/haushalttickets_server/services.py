@@ -292,6 +292,11 @@ def _update_approval(session: Session, actor: Actor, ticket: Ticket) -> None:
                 ticket.id,
                 {"price_estimated": ticket.price_estimated},
             )
+            # A decision is due: the ticket is being discussed until then.
+            if ticket.status not in CLOSED_STATUSES:
+                _change_status(
+                    session, actor, ticket, Status.DISCUSSING, "approval_requested"
+                )
 
 
 def create_ticket(session: Session, actor: Actor, data: TicketCreate) -> Ticket:
@@ -391,30 +396,44 @@ def set_status(
 ) -> Ticket:
     """Move a ticket to another column."""
     override = perm.check_status(actor, ticket, status)
+    _change_status(session, actor, ticket, status, override=override)
+    return ticket
+
+
+def _change_status(
+    session: Session,
+    actor: Actor,
+    ticket: Ticket,
+    status: Status,
+    reason: str | None = None,
+    *,
+    override: bool = False,
+) -> None:
+    """Record and announce a status change.
+
+    ``reason`` marks a move that follows from an approval step rather than from
+    someone moving the ticket; it is not checked against the actor's rights.
+    """
     old = ticket.status
     if old == status:
-        return ticket
+        return
     record(session, actor, ticket, "status", old, status)
     if override:
         record(session, actor, ticket, "admin_override", None, "accepted_for_requester")
     ticket.status = status
     ticket.closed_at = _now() if status in CLOSED_STATUSES else None
     ticket.updated_at = _now()
-    emit(
-        session,
-        actor,
-        EventType.STATUS_CHANGED,
-        ticket.id,
-        {
-            "old": old,
-            "new": status,
-            "title": ticket.title,
-            "requested_by_id": ticket.requested_by_id,
-            "assignee_ids": ticket.assignee_ids,
-            "admin_override": override,
-        },
-    )
-    return ticket
+    payload = {
+        "old": old,
+        "new": status,
+        "title": ticket.title,
+        "requested_by_id": ticket.requested_by_id,
+        "assignee_ids": ticket.assignee_ids,
+        "admin_override": override,
+    }
+    if reason:
+        payload["reason"] = reason
+    emit(session, actor, EventType.STATUS_CHANGED, ticket.id, payload)
 
 
 def set_assignees(
@@ -463,6 +482,12 @@ def decide_approval(
             "requested_by_id": ticket.requested_by_id,
         },
     )
+    # The decision moves the ticket: approved → open (to do), declined → dream on.
+    if approve:
+        if ticket.status in (Status.DISCUSSING, Status.REJECTED):
+            _change_status(session, actor, ticket, Status.NEW, "approval_approved")
+    elif ticket.status not in CLOSED_STATUSES:
+        _change_status(session, actor, ticket, Status.REJECTED, "approval_declined")
     return ticket
 
 

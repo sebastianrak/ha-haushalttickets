@@ -10,6 +10,7 @@ from pytest_homeassistant_custom_component.common import (
     async_capture_events,
 )
 
+from custom_components.haushalttickets.api import Acting
 from custom_components.haushalttickets.const import DOMAIN, EVENT_NOTIFICATION
 from custom_components.haushalttickets.coordinator import TicketData
 from custom_components.haushalttickets.notifications import (
@@ -133,6 +134,11 @@ def test_status_changes_reach_the_requester() -> None:
     assert _by_person(notifications_for(rejected, DATA, "de"))["person.alex"].title == (
         "Träum weiter"
     )
+    # Moves that follow an approval step: the approval message tells it already.
+    after_decline = _event(
+        "status_changed", "robin", {"new": "rejected", "reason": "approval_declined"}
+    )
+    assert notifications_for(after_decline, DATA, "de") == []
 
 
 def test_comment_and_ai() -> None:
@@ -239,6 +245,39 @@ async def test_approval_and_acceptance_events(
     assert ("person.robin", "assigned", repair["id"]) in got
     assert ("person.alex", "acceptance", repair["id"]) in got
     assert all("actions" not in e.data for e in sent)
+
+
+async def test_declined_purchase_is_told_once(
+    hass: HomeAssistant, loaded: MockConfigEntry, household: Household
+) -> None:
+    """Alex declines Robin's purchase: it goes to dream on, Robin hears it once."""
+    await _call(
+        hass, "set_role", household.alex.id, person="person.robin", role="adult"
+    )
+    ticket = await _call(
+        hass,
+        "create_ticket",
+        household.robin.id,
+        type="purchase",
+        title="Fernseher",
+        extra_fields={"price_estimated": "1200.00"},
+    )
+    client = loaded.runtime_data.client
+    assert (await client.ticket(ticket["id"]))["status"] == "discussing"
+    await _settle(hass, loaded)
+
+    sent = async_capture_events(hass, EVENT_NOTIFICATION)
+    await client.request(
+        "POST",
+        f"/api/v1/tickets/{ticket['id']}/approval",
+        acting=Acting(household.alex.id, "ui"),
+        json={"decision": "decline"},
+    )
+    await _settle(hass, loaded)
+    assert (await client.ticket(ticket["id"]))["status"] == "rejected"
+    assert [(e.data["person"], e.data["kind"]) for e in sent] == [
+        ("person.robin", "declined")
+    ]
 
 
 async def test_send_due_reminders(

@@ -3,8 +3,9 @@
  *
  * Basiert auf dem Ticket-Board von Kily's World (https://kilysworld.com,
  * https://github.com/johnkily/ha-blueprints, MIT-Lizenz) einschließlich der lokalen
- * Anpassungen p1–p6 (Spalte „Neue Tickets“, iPhone-Reiter, Dialog als Portal mit festem
- * Fußbalken, zweistufiges Löschen, Hinweise statt alert(), Touch-Bedienung ohne Ziehen).
+ * Anpassungen p1–p6 (erste Spalte umbenannt, seit 0.5.0 „Offen“, iPhone-Reiter,
+ * Dialog als Portal mit festem Fußbalken, zweistufiges Löschen, Hinweise statt alert(),
+ * Touch-Bedienung ohne Ziehen).
  * Die Tickets liegen auf dem Haushalttickets-Server; die Karte spricht ihn über die
  * Integration an (WebSocket haushalttickets/request, Fotos über /api/haushalttickets/…).
  * Was jemand darf, entscheidet allein der Server.
@@ -15,11 +16,11 @@
  *
  * MIT-Lizenz
  */
-const HT_VERSION = "0.4.1";
+const HT_VERSION = "0.5.0";
 
 const HT_TEXTE = {
   de: {
-    spalten: { new: "Neue Tickets", discussing: "Wird beredet", in_progress: "In Arbeit", acceptance: "Abnahme", done: "Erledigt", rejected: "Träum weiter" },
+    spalten: { new: "Offen", discussing: "Wird beredet", in_progress: "In Arbeit", acceptance: "Abnahme", done: "Erledigt", rejected: "Träum weiter" },
     dringlich: { someday: "Irgendwann", this_week: "Diese Woche", burning: "Brennt" },
     typen: { repair: "Reparatur", purchase: "Anschaffung", home_assistant: "Home Assistant" },
     alle: "Alle", ich: "Meine", alleTypen: "Alle Typen", suche: "Suchen …", neu: "Neues Ticket", titel: "Was ist zu tun?",
@@ -69,7 +70,7 @@ const HT_TEXTE = {
     },
   },
   en: {
-    spalten: { new: "Inbox", discussing: "Discussing", in_progress: "In progress", acceptance: "Review", done: "Done", rejected: "Dream on" },
+    spalten: { new: "Open", discussing: "Discussing", in_progress: "In progress", acceptance: "Review", done: "Done", rejected: "Dream on" },
     dringlich: { someday: "Someday", this_week: "This week", burning: "Urgent" },
     typen: { repair: "Repair", purchase: "Purchase", home_assistant: "Home Assistant" },
     alle: "All", ich: "Mine", alleTypen: "All types", suche: "Search …", neu: "New ticket", titel: "What needs doing?",
@@ -107,7 +108,7 @@ const HT_TEXTE = {
 };
 
 const HT_SPALTEN = [
-  { key: "new", icon: "mdi:inbox-arrow-down", farbe: "#90a4ae" },
+  { key: "new", icon: "mdi:clipboard-list-outline", farbe: "#90a4ae" },
   { key: "discussing", icon: "mdi:chat-processing-outline", farbe: "#4fc3f7" },
   { key: "in_progress", icon: "mdi:hammer-wrench", farbe: "#ffb74d" },
   { key: "acceptance", icon: "mdi:clipboard-check-outline", farbe: "#ce93d8" },

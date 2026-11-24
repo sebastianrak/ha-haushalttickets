@@ -100,7 +100,7 @@ channel, quiet hours) is up to an automation, so it stays editable in the UI.
 | Approval requested | the adults except the requester (with the estimated price) |
 | Approval decided | the requester |
 | Status → acceptance | the requester |
-| Status → done / dream on | the requester |
+| Status → done / dream on | the requester (not when the move follows an approval decision; the approval message covers it) |
 | Comment | requester and assignees |
 | Everything else (fields, photos, checklist) | nobody |
 

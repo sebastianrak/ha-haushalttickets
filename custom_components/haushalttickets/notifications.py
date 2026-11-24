@@ -223,7 +223,8 @@ def notifications_for(
             build.add([requester], decision, line, ticket_id)
     elif kind == "status_changed":
         new = payload.get("new")
-        if new in ("acceptance", "done", "rejected"):
+        # Moves that follow an approval step are told by the approval message.
+        if new in ("acceptance", "done", "rejected") and not payload.get("reason"):
             build.add([requester], new, line, ticket_id)
     elif kind == "comment_added":
         message = f"#{ticket_id} {title}\n{actor}"
