@@ -87,18 +87,35 @@ Invoices are attachments of kind `invoice`.
 | `ai_draft` | `ticket_id`, `version`, `body`, `run_id`, `created_at` | AI proposals |
 | `change_log` | `ticket_id`, `run_id`, `summary`, `objects`, `git_commit`, `at` | Home Assistant changes by the nightly run |
 | `nightly_run` | `started_at`, `ended_at`, `outcome` (`no_work`, `quota_low`, `done`, `failed`), `tickets` | Run log |
-| `series` | template fields, `mode`, `interval`, `rrule`, `lead_days`, `active` | Recurring tickets |
+| `series` | template fields, `checklist`, `fields`, `mode`, `interval`, `anchor`, `lead_days`, `next_due`, `active` | Recurring tickets |
 
 ## Recurring tickets
 
+A series is a template (type, title, description, urgency, hearts, assignees, area and
+device, checklist texts, planned type fields: entities, estimated price, link, vendor,
+contractor, phone, estimated cost) plus a rule. Every round is a normal ticket with
+`series_id`, `created_via = recurrence`, the series owner as requester and the
+user "Automation" as creator; its checklist starts unticked.
+
 - Mode per series:
-  - `after_completion`: next due date = completion date + interval
-    (days/weeks/months/years).
-  - `fixed_calendar`: next due date from a calendar rule (subset of iCalendar RRULE,
-    e.g. `FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=1`).
-- The next ticket appears `lead_days` before its due date (default **7**).
-- At most one open ticket per series.
-- Generated tickets have `created_via = recurrence` and the series owner as requester.
+  - `after_completion`: next due date = day the round was closed + interval
+    (days/weeks/months/years). Until then `next_due` is empty.
+  - `fixed_calendar`: rounds fall on `anchor + n × interval`, the anchor being the first
+    due date (month ends stay put: 31 Jan → 28 Feb → 31 Mar). `rrule` is unused.
+- A round appears `lead_days` before its due date (default **7**). The server checks
+  every 15 minutes and right after a change.
+- At most one open round per series. A round that is still open when the next date
+  comes into view holds the series back; missed calendar dates are skipped, no round
+  is created overdue.
+- Closing a round as "Träum weiter" skips that round only; the series goes on. Deleting
+  an open round counts as closing it.
+- A series can start from an existing ticket (it becomes the first round) or blank with
+  a first due date (the first round appears with the lead time).
+- Changes to a series affect future rounds only. Pausing stops new rounds; ending a
+  series keeps its tickets.
+- Adults manage every series. Children manage their own series without assignees and
+  with the fields they may set on their own tickets. AI and automations do not manage
+  series. Purchases above the threshold ask for approval in every round.
 
 ## Rules
 

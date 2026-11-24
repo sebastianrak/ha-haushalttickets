@@ -27,11 +27,17 @@ const ticket = (id, extra = {}) => ({
   updated_at: now, closed_at: null, comment_count: 0, attachment_count: 0, cover_attachment_id: null, ...extra,
 });
 const open = [
-  ticket(1, { urgency: "burning", assignee_ids: ["u-robin"], cover_attachment_id: "a1", attachment_count: 1 }),
+  ticket(1, { urgency: "burning", assignee_ids: ["u-robin"], cover_attachment_id: "a1", attachment_count: 1, series_id: 5 }),
   ticket(2, { status: "waiting_for_parts", type: "purchase", approval_state: "pending", price_estimated: "899.00" }),
   ticket(3, { status: "acceptance", type: "home_assistant", comment_count: 2 }),
 ];
 const closed = Array.from({ length: 8 }, (_, i) => ticket(10 + i, { status: i % 2 ? "rejected" : "done", closed_at: now }));
+const serien = [{
+  id: 5, type: "repair", title: "Rauchmelder testen", description: "", urgency: "someday", importance: null,
+  requested_by_id: "u-alex", assignee_ids: ["u-robin"], ha_area_id: null, ha_device_id: null, checklist: [], fields: {},
+  mode: "fixed_calendar", interval_count: 1, interval_unit: "years", lead_days: 7, next_due: "2099-06-01",
+  anchor: "2098-06-01", active: true, created_at: now, updated_at: now, open_ticket_id: null, appears_on: "2099-05-25", round_count: 1,
+}];
 const sent = [];
 const hass = {
   language: "de",
@@ -60,6 +66,8 @@ const hass = {
         return [{ id: "a9", ticket_id: 2, kind: "invoice", filename: "rechnung.pdf", content_type: "application/pdf", size: 1, sha256: "", uploaded_by_id: "u-alex", uploaded_via: "ui", created_at: now }];
       }
       if (method === "POST" && path === "/api/v1/tickets") return ticket(99, msg.body);
+      if (path === "/api/v1/series" && method === "GET") return serien;
+      if (path === "/api/v1/series" && method === "POST") return { id: 9, appears_on: "2099-01-01", ...msg.body };
       return {};
     },
     subscribeMessage(cb, msg) { sent.push(msg); return Promise.resolve(() => {}); },
@@ -202,6 +210,59 @@ netzFehler = true;
 await waehlen(fotoFeld, [new window.File(["abc"], "scan.pdf", { type: "application/pdf" })]);
 await tick();
 assert.match(hinweise.pop(), /^Hochladen fehlgeschlagen: scan\.pdf \(0 MB\) – Load failed$/);
+
+// Wiederkehrende Tickets: Symbol auf der Kachel, Zähler im Kopf, Übersicht
+card._zu_();
+assert.ok(root.querySelector('.karte[data-id="1"] ha-icon[icon="mdi:repeat"]'), "repeat icon on tile");
+assert.equal(root.querySelector(".kopf .wdhk b").textContent, "1");
+root.querySelector(".kopf .wdhk").click();
+await tick();
+let ps = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+const zeile = ps.querySelector('.serie[data-s="5"]');
+assert.match(zeile.textContent, /jedes Jahr · fester Kalender/);
+assert.match(zeile.textContent, /nächste Runde fällig/);
+sent.length = 0;
+zeile.querySelector('[data-a="pause"]').click();
+await tick(); await tick();
+same(sent.find((m) => m.method === "PATCH").body, { active: false });
+ps = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+ps.querySelector('.serie[data-s="5"] [data-a="edit"]').click();
+ps = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+const edit = ps.querySelector('.serie[data-s="5"] .sedit');
+edit.querySelector(".rn").value = "2";
+edit.querySelector('.rm button[data-v="after_completion"]').click();
+sent.length = 0;
+edit.querySelector('[data-a="save"]').click();
+await tick(); await tick();
+same(sent.find((m) => m.method === "PATCH").body, { interval_count: 2, mode: "after_completion" });
+card._serienZu();
+
+// Neues Ticket mit Wiederholung, erste Runde weit hin: nur die Serie wird geplant
+root.querySelector(".plus").click();
+await tick();
+let p5 = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+p5.querySelector(".dtitel").value = "Heizung warten";
+p5.querySelector(".datum").value = "2099-09-01";
+p5.querySelector(".datum").dispatchEvent(new window.Event("change"));
+p5.querySelector(".wdhan").click();
+p5.querySelector(".wdhregel .re").value = "years";
+sent.length = 0;
+p5.querySelector(".ok").click();
+await tick(); await tick();
+assert.ok(!sent.some((m) => m.method === "POST" && m.path === "/api/v1/tickets"), "no ticket yet");
+const plan = sent.find((m) => m.method === "POST" && m.path === "/api/v1/series").body;
+same(plan, { type: "repair", title: "Heizung warten", urgency: "someday", first_due: "2099-09-01", interval_count: 1, interval_unit: "years", mode: "after_completion", lead_days: 7 });
+assert.match(hinweise.pop(), /^Geplant – erscheint am /);
+
+// Bestehendes Ticket wiederholen: das Ticket wird die erste Runde
+root.querySelector('.karte[data-id="2"]').click();
+await tick(); await tick();
+p5 = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+p5.querySelector(".wdhan").click();
+sent.length = 0;
+p5.querySelector(".ok").click();
+await tick(); await tick();
+same(sent.find((m) => m.path === "/api/v1/series").body, { from_ticket_id: 2, interval_count: 1, interval_unit: "months", mode: "after_completion", lead_days: 7 });
 
 // Link, während das Board schon offen ist (HA navigiert und meldet location-changed)
 card._zu_();

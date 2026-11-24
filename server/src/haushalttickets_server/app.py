@@ -1,22 +1,59 @@
 """FastAPI application."""
 
+import asyncio
+from collections.abc import AsyncIterator
+import contextlib
 from ipaddress import ip_address
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from . import __version__
+from . import __version__, recurrence
 from .api import router
 from .config import Settings
 from .db import make_engine, make_sessionmaker
 from .permissions import PermissionDenied
 from .services import Invalid, NotFound
 
+_LOGGER = logging.getLogger(__name__)
+
+
+def _create_rounds(app: FastAPI) -> None:
+    with app.state.sessionmaker() as session:
+        created = recurrence.run(session)
+        session.commit()
+    if created:
+        _LOGGER.info("Recurring tickets created: %s", [t.id for t in created])
+
+
+async def _recurrence_loop(app: FastAPI, minutes: int) -> None:
+    while True:
+        try:
+            await asyncio.to_thread(_create_rounds, app)
+        except Exception:
+            _LOGGER.exception("Creating recurring tickets failed")
+        await asyncio.sleep(minutes * 60)
+
+
+@contextlib.asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    minutes = app.state.settings.recurrence_minutes
+    task = asyncio.create_task(_recurrence_loop(app, minutes)) if minutes > 0 else None
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create the application."""
     settings = settings or Settings()
-    app = FastAPI(title="Haushalttickets", version=__version__)
+    recurrence.TIMEZONE = settings.timezone
+    app = FastAPI(title="Haushalttickets", version=__version__, lifespan=_lifespan)
     app.state.settings = settings
     app.state.engine = make_engine(settings.database_url)
     app.state.sessionmaker = make_sessionmaker(app.state.engine)

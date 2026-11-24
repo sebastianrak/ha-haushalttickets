@@ -54,7 +54,7 @@ Fired for every change on the server (polled every 10 seconds):
 
 ```yaml
 seq: 42
-type: status_changed        # ticket_created, comment_added, approval_requested, ...
+type: status_changed        # ticket_created, comment_added, approval_requested, series_changed, ...
 ticket_id: 7
 actor_id: <HA user id or "automation">
 actor_person: person.robin
@@ -66,7 +66,7 @@ ticket:
   status: acceptance
   requested_by_person: person.alex
   assignee_persons: [person.robin]
-  # type, urgency, due_date, approval_state, requested_by_id, assignee_ids
+  # type, urgency, due_date, approval_state, series_id, requested_by_id, assignee_ids
 ```
 
 Example: notify the requester when a ticket waits for acceptance.
@@ -102,6 +102,7 @@ channel, quiet hours) is up to an automation, so it stays editable in the UI.
 | Status → acceptance | the requester |
 | Status → done / dream on | the requester (not when the move follows an approval decision; the approval message covers it) |
 | Comment | requester and assignees |
+| New round of a recurring series | its assignees, otherwise the requester, with the due date |
 | Everything else (fields, photos, checklist) | nobody |
 
 Nobody is told about their own action. Only active members with a person entity are
@@ -111,7 +112,7 @@ notified, never AI accounts. Changes made through AI tools say so ("… via AI")
 user_id: <HA user id>
 person: person.robin
 kind: approval_requested    # burning, assigned, approved, declined, acceptance, done,
-                            # rejected, comment, due
+                            # rejected, comment, due, recurring
 title: Approval needed
 message: "#7 Washing machine – by Alex\nestimated €899.00"
 ticket_id: 7                # null for the due summary

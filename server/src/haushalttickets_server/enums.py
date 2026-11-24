@@ -127,3 +127,5 @@ class EventType(StrEnum):
     COMMENT_ADDED = "comment_added"
     ATTACHMENT_ADDED = "attachment_added"
     CHECKLIST_CHANGED = "checklist_changed"
+    # A recurring series was created, changed, paused or ended (payload: action).
+    SERIES_CHANGED = "series_changed"

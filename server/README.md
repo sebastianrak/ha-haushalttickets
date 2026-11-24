@@ -7,6 +7,7 @@ Debian LXC next to PostgreSQL.
 
 ```bash
 haushalttickets-server migrate               # apply database migrations
+haushalttickets-server recur                 # create recurring tickets that are due now
 haushalttickets-server token create NAME     # create an API token (printed once)
 haushalttickets-server token revoke NAME
 haushalttickets-server                       # run the API (same as "serve")
@@ -20,6 +21,8 @@ Settings come from environment variables with the prefix `HAUSHALTTICKETS_`:
 | `HAUSHALTTICKETS_HOST` / `_PORT` | `127.0.0.1` / `8080` |
 | `HAUSHALTTICKETS_ATTACHMENTS_DIR` | `/var/lib/haushalttickets/attachments` |
 | `HAUSHALTTICKETS_MAX_ATTACHMENT_BYTES` | 20 MiB |
+| `HAUSHALTTICKETS_TIMEZONE` | `Europe/Berlin` (days of recurring tickets) |
+| `HAUSHALTTICKETS_RECURRENCE_MINUTES` | `15` (how often the server creates due rounds; `0` = only on changes) |
 
 ## API
 
@@ -30,7 +33,7 @@ The Home Assistant integration names the acting household member:
 | Header | Meaning |
 |---|---|
 | `X-Acting-User` | Home Assistant user id. Without it the request acts as the integration itself (read and user sync only). |
-| `X-Acting-Via` | `ui` (default), `mcp`, `nightly_run`, `recurrence`, `emergency_ui`. `mcp` and `nightly_run` always follow the AI rules. |
+| `X-Acting-Via` | `ui` (default), `mcp`, `nightly_run`, `emergency_ui`, `automation`. `mcp` and `nightly_run` always follow the AI rules. `recurrence` is reserved for the server itself. |
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -50,6 +53,8 @@ The Home Assistant integration names the acting household member:
 | GET | `/api/v1/tickets/{id}/history` | Recorded changes |
 | GET, POST | `/api/v1/tickets/{id}/attachments` | Files (multipart `file`, `kind`) |
 | GET, DELETE | `/api/v1/attachments/{id}` | Download, remove |
+| GET, POST | `/api/v1/series` | Recurring series: list, create (from a ticket or blank) |
+| GET, PATCH, DELETE | `/api/v1/series/{id}` | Read, change/pause/resume, end (its tickets stay) |
 | GET | `/api/v1/events?after=SEQ` | Event feed for notifications and refresh |
 
 Errors return `{"detail": {"code": "...", "detail": "..."}}` with stable codes such as

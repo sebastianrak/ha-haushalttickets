@@ -269,3 +269,50 @@ def check_admin(actor: Actor) -> None:
     require_user(actor)
     if not actor.is_human(Role.ADMIN) or actor.is_automation:
         _deny("admin_required", "Admins only.")
+
+
+# Fields of a series template a child may set (as for their own tickets).
+CHILD_SERIES_FIELDS = frozenset(
+    {
+        "title",
+        "description",
+        "urgency",
+        "importance",
+        "ha_area_id",
+        "ha_device_id",
+        "checklist",
+        "fields.product_url",
+        "fields.vendor",
+    }
+)
+
+
+def check_series(
+    actor: Actor,
+    owner_id: str | None,
+    assignee_ids: Iterable[str],
+    fields: Iterable[str] = (),
+    series_owner_id: str | None = None,
+) -> None:
+    """Create or change a recurring series.
+
+    Adults manage every series. Children manage their own series only, without
+    assignees. AI agents and automations do not manage series.
+    """
+    require_user(actor)
+    if actor.is_ai:
+        _deny("ai_series_forbidden", "The AI does not manage recurring tickets.")
+    if actor.is_automation:
+        _deny("forbidden", "Automations do not manage recurring tickets.")
+    if actor.is_human(*ADULTS):
+        return
+    if actor.role != Role.CHILD:
+        _deny("forbidden", "Not allowed.")
+    if series_owner_id is not None and series_owner_id != actor.user_id:
+        _deny("series_forbidden", "Children manage their own series only.")
+    if owner_id not in (None, actor.user_id):
+        _deny("requester_forbidden", "Only adults may file tickets for others.")
+    if list(assignee_ids):
+        _deny("assign_forbidden", "Only adults may assign tickets.")
+    if extra := set(fields) - CHILD_SERIES_FIELDS:
+        _deny("field_forbidden", f"Not allowed: {', '.join(sorted(extra))}.")

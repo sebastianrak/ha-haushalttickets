@@ -35,6 +35,16 @@ on phones, invoices for purchases), and a combined history with comments.
 Photos are scaled to at most 2560 px before upload. Home Assistant accepts
 uploads up to 16 MiB.
 
+## Recurring tickets
+
+- **Wiederholen** in the ticket dialog: rhythm (every n days/weeks/months/years), mode
+  ("ab Erledigung" or "fester Kalender") and lead time. An existing ticket becomes the
+  first round. A new ticket whose due date lies beyond the lead time is only planned:
+  it appears on the board when its lead time starts.
+- **Wiederkehrend** in the header lists every series with its rhythm, the open round or
+  the next due date, and lets you change, pause or end it.
+- Tiles of rounds carry a repeat icon. Children manage their own series only.
+
 ## Opening a ticket from a link
 
 Add `?ticket=<number>` to the dashboard address, e.g. `/lovelace/tickets?ticket=7`,

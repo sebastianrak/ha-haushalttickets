@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from . import services
+from . import recurrence, services
 from .config import Settings
 from .enums import AUTOMATION_USER_ID, AttachmentKind, Via
 from .models import User
@@ -49,6 +49,9 @@ from .schemas import (
     EventList,
     EventOut,
     HistoryOut,
+    SeriesCreate,
+    SeriesOut,
+    SeriesPatch,
     SettingsOut,
     SettingsPatch,
     StatusChange,
@@ -119,6 +122,11 @@ def get_actor(
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "invalid_via", "detail": "via=system needs no user."},
         )
+    if via == Via.RECURRENCE:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_via", "detail": "via=recurrence is the server's."},
+        )
     if (via == Via.AUTOMATION) != (x_acting_user == AUTOMATION_USER_ID):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -149,6 +157,12 @@ def _tickets_out(session: Session, tickets: list) -> list[TicketOut]:
 
 def _ticket_out(session: Session, ticket) -> TicketOut:
     return _tickets_out(session, [ticket])[0]
+
+
+def _series_out(session: Session, series) -> SeriesOut:
+    return SeriesOut.model_validate(series).model_copy(
+        update=recurrence.series_info(session, series)
+    )
 
 
 # Users
@@ -542,3 +556,48 @@ def list_events(
         last_seq=services.last_event_seq(session),
         events=[EventOut.model_validate(e) for e in events],
     )
+
+
+# Recurring series
+
+
+@router.get("/series")
+def list_series(session: SessionDep, actor: ActorDep) -> list[SeriesOut]:
+    """All recurring series, the next due first."""
+    return [_series_out(session, s) for s in recurrence.list_series(session)]
+
+
+@router.post("/series", status_code=status.HTTP_201_CREATED)
+def create_series(
+    session: SessionDep, actor: ActorDep, body: SeriesCreate
+) -> SeriesOut:
+    """Make a ticket repeat, or plan a series whose first round comes later."""
+    series = recurrence.create_series(session, actor, body)
+    session.commit()
+    return _series_out(session, series)
+
+
+@router.get("/series/{series_id}")
+def get_series(session: SessionDep, actor: ActorDep, series_id: int) -> SeriesOut:
+    """One series."""
+    return _series_out(session, recurrence.get_series(session, series_id))
+
+
+@router.patch("/series/{series_id}")
+def patch_series(
+    session: SessionDep, actor: ActorDep, series_id: int, body: SeriesPatch
+) -> SeriesOut:
+    """Change, pause or resume a series."""
+    series = recurrence.update_series(
+        session, actor, recurrence.get_series(session, series_id), body
+    )
+    session.commit()
+    return _series_out(session, series)
+
+
+@router.delete("/series/{series_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_series(session: SessionDep, actor: ActorDep, series_id: int) -> Response:
+    """End a series; its tickets stay."""
+    recurrence.delete_series(session, actor, recurrence.get_series(session, series_id))
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
