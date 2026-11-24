@@ -1,6 +1,7 @@
 name: Release
 
-# Push a tag like v0.1.0. The tag must match the server version.
+# Push a tag like v0.1.0, or create the release in the GitHub UI. The tag must match
+# the server version. A release that already exists gets the assets attached.
 on:
   push:
     tags: ["v*"]
@@ -33,4 +34,9 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag
+          fi
