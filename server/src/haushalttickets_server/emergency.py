@@ -23,6 +23,7 @@ import html
 from ipaddress import ip_address
 import logging
 import secrets
+import ssl
 import threading
 import time
 from typing import Annotated, Any
@@ -1352,6 +1353,13 @@ def _history_text(
 # Serving
 
 
+def _tls_context(info: tls.CertInfo) -> ssl.SSLContext:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(info.cert, info.key)
+    return context
+
+
 def make_server(
     settings: Settings, factory: sessionmaker[Session]
 ) -> uvicorn.Server | None:
@@ -1373,13 +1381,24 @@ def make_server(
         proxy_headers=False,
         server_header=False,
     )
+    config.load()
     server = uvicorn.Server(config)
+
+    # Switching certificates at runtime: loading a second certificate into the
+    # running context would keep the first one as well (OpenSSL holds one per key
+    # type, e.g. the self-signed EC one next to an own RSA one), and browsers would
+    # still get the old one. Instead every handshake switches to the context of the
+    # current certificate; OpenSSL calls this also without SNI (e.g. for an IP).
+    current = {"context": _tls_context(info)}
+
+    def choose(ssl_object: Any, server_name: str | None, context: Any) -> None:
+        ssl_object.context = current["context"]
+
+    config.ssl.sni_callback = choose
 
     def reload() -> None:
         """Serve the current certificate from the next handshake on."""
-        current = tls.active(settings.tls_dir)
-        if server.config.ssl is not None:
-            server.config.ssl.load_cert_chain(current.cert, current.key)
+        current["context"] = _tls_context(tls.active(settings.tls_dir))
 
     app.state.reload_certificate = reload
     server.config_reload_certificate = reload  # type: ignore[attr-defined]
