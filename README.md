@@ -35,7 +35,6 @@ claude.ai ──Nabu Casa──▶ Home Assistant ── mcp_server (/api/mcp/ha
 |---|---|---|
 | Server | `server/` | FastAPI + PostgreSQL in a Debian LXC; source of truth for tickets, attachments, history |
 | Integration | `custom_components/haushalttickets/` | Sensors, events, actions, Kanban card, file proxy, LLM API for MCP, see [docs/integration.md](docs/integration.md) and [docs/card.md](docs/card.md) |
-| Spike | `spike/` | Throwaway proof that integration-provided tools reach MCP clients via `mcp_server` |
 | Docs | `docs/` | Architecture and decisions |
 
 See [docs/architecture.md](docs/architecture.md), [docs/data-model.md](docs/data-model.md) and [deploy/README.md](deploy/README.md) for details.
@@ -63,9 +62,6 @@ cd server && uv run --extra test pytest
 # integration (Home Assistant test harness; starts the server from server/.venv)
 (cd server && uv sync) && uv venv .venv-ha --python 3.14 \
   && uv pip install --python .venv-ha -r requirements_test.txt && .venv-ha/bin/python -m pytest
-
-# spike
-cd spike && uv pip install -r requirements_test.txt && python -m pytest
 ```
 
 ## License
