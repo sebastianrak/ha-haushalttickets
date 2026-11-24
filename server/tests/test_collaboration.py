@@ -13,11 +13,9 @@ def test_ai_flags(api: Api) -> None:
     assert flags(api, "robin", draft_requested=True).json()["ai_draft_requested"]
     response = flags(api, "robin", implement_approved=True)
     assert error_code(response) == "implement_not_applicable"
-    approved = flags(api, "robin", ticket_id=2, implement_approved=True).json()
-    assert approved["ai_implement_approved"] is True
-    assert approved["ai_implement_approved_by_id"] == uid("robin")
-    revoked = flags(api, "robin", ticket_id=2, implement_approved=False).json()
-    assert revoked["ai_implement_approved_by_id"] is None
+    # Approving needs a draft to approve (decision 50; see test_nightly.py).
+    response = flags(api, "robin", ticket_id=2, implement_approved=True)
+    assert error_code(response) == "no_draft"
     for name, via in (("alex", "mcp"), ("kind", "ui"), ("ki", "ui")):
         response = flags(api, name, via, ticket_id=2, implement_approved=True)
         assert error_code(response) == "ai_flags_forbidden"

@@ -29,6 +29,7 @@ from .enums import (
     TicketType,
 )
 from .models import (
+    AIDraft,
     ApiToken,
     Attachment,
     ChecklistItem,
@@ -495,6 +496,27 @@ def decide_approval(
     return ticket
 
 
+def latest_draft_version(session: Session, ticket: Ticket) -> int | None:
+    """Newest AI draft version of a ticket."""
+    return session.scalar(
+        select(func.max(AIDraft.version)).where(AIDraft.ticket_id == ticket.id)
+    )
+
+
+def clear_implement_approval(
+    session: Session, actor: Actor, ticket: Ticket, changed: dict[str, Any]
+) -> None:
+    """Withdraw the approval to implement (recorded)."""
+    if not ticket.ai_implement_approved:
+        return
+    record(session, actor, ticket, "ai_implement_approved", True, False)
+    ticket.ai_implement_approved = False
+    ticket.ai_implement_approved_by_id = None
+    ticket.ai_implement_approved_at = None
+    ticket.ai_implement_draft_version = None
+    changed["ai_implement_approved"] = False
+
+
 def set_ai_flags(
     session: Session,
     actor: Actor,
@@ -502,9 +524,23 @@ def set_ai_flags(
     draft: bool | None,
     implement: bool | None,
 ) -> Ticket:
-    """Set "AI should draft" and "AI should implement"."""
+    """Set "AI should draft" and "AI should implement".
+
+    The approval to implement refers to the newest draft (decision 50): it needs a
+    draft and no pending request for a new one, and asking for a new draft withdraws
+    it.
+    """
     perm.check_ai_flags(actor, ticket, draft, implement)
-    changed = {}
+    changed: dict[str, Any] = {}
+    draft_after = ticket.ai_draft_requested if draft is None else draft
+    if implement and not ticket.ai_implement_approved:
+        if draft_after:
+            raise Invalid(
+                "draft_pending", "A new draft is requested; approve it once it is in."
+            )
+        version = latest_draft_version(session, ticket)
+        if version is None:
+            raise Invalid("no_draft", "There is no draft to implement yet.")
     if draft is not None and draft != ticket.ai_draft_requested:
         record(
             session,
@@ -516,19 +552,19 @@ def set_ai_flags(
         )
         ticket.ai_draft_requested = draft
         changed["ai_draft_requested"] = draft
+        if draft:
+            clear_implement_approval(session, actor, ticket, changed)
     if implement is not None and implement != ticket.ai_implement_approved:
-        record(
-            session,
-            actor,
-            ticket,
-            "ai_implement_approved",
-            ticket.ai_implement_approved,
-            implement,
-        )
-        ticket.ai_implement_approved = implement
-        ticket.ai_implement_approved_by_id = actor.user_id if implement else None
-        ticket.ai_implement_approved_at = _now() if implement else None
-        changed["ai_implement_approved"] = implement
+        if implement:
+            record(session, actor, ticket, "ai_implement_approved", False, True)
+            ticket.ai_implement_approved = True
+            ticket.ai_implement_approved_by_id = actor.user_id
+            ticket.ai_implement_approved_at = _now()
+            ticket.ai_implement_draft_version = version
+            changed["ai_implement_approved"] = True
+            changed["ai_implement_draft_version"] = version
+        else:
+            clear_implement_approval(session, actor, ticket, changed)
     if changed:
         emit(session, actor, EventType.AI_FLAGS_CHANGED, ticket.id, changed)
     return ticket
@@ -709,6 +745,7 @@ class TicketStats:
     comment_count: int = 0
     attachment_count: int = 0
     cover_attachment_id: str | None = None
+    latest_draft_version: int | None = None
 
 
 def ticket_stats(session: Session, ticket_ids: list[int]) -> dict[int, TicketStats]:
@@ -729,6 +766,13 @@ def ticket_stats(session: Session, ticket_ids: list[int]) -> dict[int, TicketSta
             .group_by(Attachment.ticket_id)
         ).all()
     )
+    drafts = dict(
+        session.execute(
+            select(AIDraft.ticket_id, func.max(AIDraft.version))
+            .where(AIDraft.ticket_id.in_(ticket_ids))
+            .group_by(AIDraft.ticket_id)
+        ).all()
+    )
     covers: dict[int, str] = {}
     for ticket_id, attachment_id in session.execute(
         select(Attachment.ticket_id, Attachment.id)
@@ -745,6 +789,7 @@ def ticket_stats(session: Session, ticket_ids: list[int]) -> dict[int, TicketSta
             comment_count=comments.get(ticket_id, 0),
             attachment_count=attachments.get(ticket_id, 0),
             cover_attachment_id=covers.get(ticket_id),
+            latest_draft_version=drafts.get(ticket_id),
         )
         for ticket_id in ticket_ids
     }

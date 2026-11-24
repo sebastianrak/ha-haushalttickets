@@ -9,10 +9,11 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from . import __version__, recurrence
+from . import __version__, nightly, recurrence
 from .api import router
 from .config import Settings
 from .db import make_engine, make_sessionmaker
+from .nightly_api import router as nightly_router
 from .permissions import PermissionDenied
 from .services import Invalid, NotFound
 
@@ -25,6 +26,10 @@ def _create_rounds(app: FastAPI) -> None:
         session.commit()
     if created:
         _LOGGER.info("Recurring tickets created: %s", [t.id for t in created])
+    with app.state.sessionmaker() as session:
+        if nightly.check_watchdog(session):
+            _LOGGER.warning("Approved AI work waits, but no nightly run started")
+        session.commit()
 
 
 async def _recurrence_loop(app: FastAPI, minutes: int) -> None:
@@ -32,7 +37,7 @@ async def _recurrence_loop(app: FastAPI, minutes: int) -> None:
         try:
             await asyncio.to_thread(_create_rounds, app)
         except Exception:
-            _LOGGER.exception("Creating recurring tickets failed")
+            _LOGGER.exception("Periodic work (recurring tickets, watchdog) failed")
         await asyncio.sleep(minutes * 60)
 
 
@@ -108,4 +113,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     app.include_router(router)
+    app.include_router(nightly_router)
     return app

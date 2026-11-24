@@ -192,6 +192,8 @@ class Ticket(Base):
     ai_implement_approved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # Draft version the approval to implement refers to (decision 50).
+    ai_implement_draft_version: Mapped[int | None] = mapped_column(Integer)
 
     # purchase
     price_estimated: Mapped[Decimal | None] = mapped_column(Money)
@@ -325,6 +327,10 @@ class NightlyRun(Base):
     outcome: Mapped[str | None] = mapped_column(String(20))
     tickets: Mapped[list[int]] = mapped_column(JSONType, default=list)
     notes: Mapped[str] = mapped_column(Text, default="")
+    # Per ticket: {"ticket_id", "kind", "version", "needs_restart"}.
+    results: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list)
+    # Token and cost figures the runner reports (free-form).
+    usage: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict)
 
 
 class AIDraft(Base):
@@ -360,6 +366,8 @@ class ChangeLogEntry(Base):
     summary: Mapped[str] = mapped_column(Text)
     objects: Mapped[list[str]] = mapped_column(JSONType, default=list)
     git_commit: Mapped[str | None] = mapped_column(String(64))
+    # The change only takes effect after a reload or restart (YAML files).
+    needs_restart: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = _now()
 
 

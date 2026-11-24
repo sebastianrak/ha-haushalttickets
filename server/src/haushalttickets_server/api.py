@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from . import recurrence, services
+from . import nightly, recurrence, services
 from .config import Settings
 from .enums import AUTOMATION_USER_ID, AttachmentKind, Via
 from .models import User
@@ -90,22 +90,27 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 def get_actor(
+    request: Request,
     session: SessionDep,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
     x_acting_user: Annotated[str | None, Header()] = None,
     x_acting_via: Annotated[str | None, Header()] = None,
 ) -> Actor:
     """Authenticate the client and resolve the acting user."""
-    if (
-        credentials is None
-        or services.authenticate(session, credentials.credentials) is None
+    if credentials is not None and services.authenticate(
+        session, credentials.credentials
     ):
+        session.commit()  # last_used_at
+    elif credentials is not None and (
+        runner := _runner_actor(session, credentials.credentials, request)
+    ):
+        return runner
+    else:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             detail={"code": "invalid_token", "detail": "Missing or invalid token."},
             headers={"WWW-Authenticate": "Bearer"},
         )
-    session.commit()  # last_used_at
 
     if x_acting_user is None:
         return Actor(user=None, via=Via.SYSTEM)
@@ -122,7 +127,7 @@ def get_actor(
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "invalid_via", "detail": "via=system needs no user."},
         )
-    if via in (Via.RECURRENCE, Via.EMERGENCY_UI):
+    if via in (Via.RECURRENCE, Via.EMERGENCY_UI, Via.NIGHTLY_RUN):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "invalid_via", "detail": f"via={via} is the server's."},
@@ -145,6 +150,26 @@ def get_actor(
 
 
 ActorDep = Annotated[Actor, Depends(get_actor)]
+
+
+def _runner_actor(session: Session, token: str, request: Request) -> Actor | None:
+    """The nightly runner: acts as the AI account; reads, or writes under /nightly/."""
+    try:
+        actor = nightly.authenticate(session, token)
+    except nightly.AccessDenied as err:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"code": err.code, "detail": err.message},
+        ) from None
+    if actor is None:
+        return None
+    if request.method != "GET" and not request.url.path.startswith("/api/v1/nightly/"):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"code": "nightly_only", "detail": "The runner token only reads."},
+        )
+    session.commit()  # last_used_at
+    return actor
 
 
 def _tickets_out(session: Session, tickets: list) -> list[TicketOut]:
