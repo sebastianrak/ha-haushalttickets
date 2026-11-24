@@ -22,8 +22,10 @@ Decided on 2026-11-23. Changes to this list are made by pull request.
 - Attachments are stored inside the LXC next to the database.
 - Backups: the existing Proxmox vzdump schedule, plus a nightly `pg_dump` that runs
   before the vzdump window so every backup contains a consistent dump.
-- Emergency web UI for when Home Assistant is down: internal network only, a single
-  local admin login.
+- Emergency web UI for when Home Assistant is down: HTTPS on its own port (8443),
+  only for the listed networks (home network, NetBird), a single local admin login.
+  Self-signed certificate or an own one uploaded in the UI; a ticket reminds 14 days
+  before an own certificate expires. See [server/README.md](../server/README.md).
 - Nightly AI run (Claude Code) at 03:00 via systemd timer.
 
 ### Integration (`custom_components/haushalttickets/`)

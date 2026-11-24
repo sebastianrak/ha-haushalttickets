@@ -2,10 +2,76 @@
 # Run the server command line as the service user, e.g.
 #   haushalttickets-ctl migrate
 #   haushalttickets-ctl token create homeassistant
+#   haushalttickets-ctl emergency cert
+# and, as root, set up the emergency web UI in one go:
+#   haushalttickets-ctl emergency-setup
 set -euo pipefail
 # `pct enter` passes the Proxmox host's locale (e.g. en_US.UTF-8), which the container
 # does not have; C.UTF-8 always exists.
 export LANG=C.UTF-8 LC_ALL=C.UTF-8
 unset LANGUAGE
+
+ENV_FILE="/etc/haushalttickets/server.env"
+SERVER=(runuser -u haushalttickets -- /opt/haushalttickets/venv/bin/haushalttickets-server)
+
+die() { echo "Error: $*" >&2; exit 1; }
+
+setting() { grep -Po "^HAUSHALTTICKETS_$1=\K.*" "$ENV_FILE" 2>/dev/null || true; }
+
+set_setting() {
+  if grep -q "^HAUSHALTTICKETS_$1=" "$ENV_FILE"; then
+    sed -i "s|^HAUSHALTTICKETS_$1=.*|HAUSHALTTICKETS_$1=$2|" "$ENV_FILE"
+  else
+    printf 'HAUSHALTTICKETS_%s=%s\n' "$1" "$2" >>"$ENV_FILE"
+  fi
+}
+
+emergency_setup() {
+  [[ $EUID -eq 0 ]] || die "run as root"
+  [[ -f $ENV_FILE ]] || die "$ENV_FILE not found"
+  if ! command -v openssl >/dev/null; then
+    echo "==> Installing openssl"
+    apt-get install -y -qq --no-install-recommends openssl >/dev/null
+  fi
+
+  local clients
+  clients=$(setting EMERGENCY_CLIENTS)
+  echo "Networks allowed to open the emergency UI, comma-separated, no spaces"
+  echo "(home network and NetBird, e.g. 172.16.0.0/16,100.64.0.0/10)."
+  read -r -p "Networks [${clients:-none}]: " answer
+  clients=${answer:-$clients}
+  [[ -n $clients ]] || die "at least one network is needed"
+  python3 -c 'import ipaddress, sys
+for part in sys.argv[1].split(","):
+    ipaddress.ip_network(part.strip(), strict=False)' "$clients" 2>/dev/null ||
+    die "not a list of addresses or networks: $clients"
+  set_setting EMERGENCY_CLIENTS "$clients"
+
+  echo "==> Password"
+  cd /var/lib/haushalttickets
+  "${SERVER[@]}" emergency password "$@"
+
+  echo "==> Certificate"
+  "${SERVER[@]}" emergency cert
+
+  echo "==> Restarting the server"
+  systemctl restart haushalttickets
+  local port address
+  port=$(setting EMERGENCY_PORT)
+  address=$(hostname -I 2>/dev/null | awk '{print $1}')
+  cat <<EOF
+
+Emergency UI: https://${address:-<container address>}:${port:-8443}/
+The browser warns about the self-signed certificate the first time: compare the
+SHA-256 fingerprint above, or upload your own certificate on the page "Certificate".
+EOF
+}
+
+if [[ ${1:-} == emergency-setup ]]; then
+  shift
+  emergency_setup "$@"
+  exit 0
+fi
+
 cd /var/lib/haushalttickets
-exec runuser -u haushalttickets -- /opt/haushalttickets/venv/bin/haushalttickets-server "$@"
+exec "${SERVER[@]}" "$@"

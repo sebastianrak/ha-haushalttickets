@@ -40,7 +40,8 @@ add the new container.
 | `/etc/haushalttickets/server.env` | Settings (`HAUSHALTTICKETS_*`), owned `root:haushalttickets`, mode 0640 |
 | `/var/lib/haushalttickets/attachments` | Uploaded files |
 | `/var/backups/haushalttickets` | Database dumps (14 days) |
-| `haushalttickets.service` | API on port 8080, runs as user `haushalttickets` |
+| `/var/lib/haushalttickets/tls` | Certificates of the emergency UI |
+| `haushalttickets.service` | API on port 8080 (and the emergency UI on 8443 once set up), runs as user `haushalttickets` |
 | `haushalttickets-backup.timer` | Daily `pg_dump` at the configured time |
 
 PostgreSQL uses peer authentication over the local socket; there is no database password
@@ -82,6 +83,32 @@ install -m 0755 haushalttickets-update /usr/local/sbin/haushalttickets-update
 haushalttickets-update
 ```
 
+## Emergency UI
+
+For when Home Assistant is down: a small HTTPS site in the container. Set it up once,
+as root:
+
+```bash
+haushalttickets-ctl emergency-setup
+```
+
+It asks for the networks that may open it (home network and NetBird, e.g.
+`172.16.0.0/16,100.64.0.0/10`; written to `HAUSHALTTICKETS_EMERGENCY_CLIENTS`), sets the
+password (at least 10 characters, bound to the only admin, or `--user NAME`), creates
+the self-signed certificate, prints its SHA-256 fingerprint and restarts the server.
+Then open `https://<container>:8443/` and confirm the certificate warning after
+comparing the fingerprint, or upload your own certificate on the page "Certificate".
+
+```bash
+haushalttickets-ctl emergency password          # new password (ends all sessions)
+haushalttickets-ctl emergency cert              # show the certificate in use
+haushalttickets-ctl emergency cert --remove-custom   # locked out by an own certificate
+haushalttickets-ctl emergency cert --renew      # new self-signed certificate
+systemctl restart haushalttickets               # after --remove-custom / --renew
+```
+
+To switch the emergency UI off, empty `HAUSHALTTICKETS_EMERGENCY_CLIENTS` and restart.
+
 ## Publishing a release
 
 Push a tag (`git tag v0.4.0 && git push origin v0.4.0`) or create the release in the
@@ -110,5 +137,9 @@ directory.
   `HAUSHALTTICKETS_ALLOWED_CLIENTS` (set by `--allowed-clients`); the token is required in
   any case.
 - `/api/health` is reachable from everywhere and only reveals the version.
+- The emergency UI (port 8443) answers only `HAUSHALTTICKETS_EMERGENCY_CLIENTS`, always
+  over HTTPS. Wrong passwords are logged with the client address
+  (`journalctl -u haushalttickets`); after five the login is locked for 15 minutes, for
+  everyone (one login).
 - The systemd unit uses sandboxing (`ProtectSystem=strict` and friends). If the service
   fails with status `226/NAMESPACE`, check that `nesting=1` is set on the container.

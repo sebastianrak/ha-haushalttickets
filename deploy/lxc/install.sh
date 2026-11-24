@@ -51,7 +51,7 @@ done
 echo "==> Packages"
 apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-  postgresql python3 python3-venv ca-certificates curl git >/dev/null
+  postgresql python3 python3-venv ca-certificates curl git openssl >/dev/null
 
 echo "==> User and directories"
 if ! id -u "$APP_USER" >/dev/null 2>&1; then
@@ -98,6 +98,9 @@ HAUSHALTTICKETS_ATTACHMENTS_DIR=$DATA_DIR/attachments
 # Comma-separated addresses or networks allowed to use the API, no spaces.
 # Empty = any client (the API token is still required).
 HAUSHALTTICKETS_ALLOWED_CLIENTS=$ALLOWED_CLIENTS
+# Emergency web UI (HTTPS, port 8443) for when Home Assistant is down; off while
+# empty. Set up with: haushalttickets-ctl emergency-setup
+HAUSHALTTICKETS_EMERGENCY_CLIENTS=
 EOF
 elif [[ -n $ALLOWED_CLIENTS ]]; then
   sed -i "s|^HAUSHALTTICKETS_ALLOWED_CLIENTS=.*|HAUSHALTTICKETS_ALLOWED_CLIENTS=$ALLOWED_CLIENTS|" "$ENV_FILE"

@@ -9,3 +9,7 @@ ignore = ["E501"]
 known-first-party = ["haushalttickets_server", "custom_components"]
 force-sort-within-sections = true
 combine-as-imports = true
+
+[lint.per-file-ignores]
+# German and English page texts use typographic dashes on purpose.
+"server/src/haushalttickets_server/emergency.py" = ["RUF001"]

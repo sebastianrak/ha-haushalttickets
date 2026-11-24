@@ -122,10 +122,10 @@ def get_actor(
             status.HTTP_400_BAD_REQUEST,
             detail={"code": "invalid_via", "detail": "via=system needs no user."},
         )
-    if via == Via.RECURRENCE:
+    if via in (Via.RECURRENCE, Via.EMERGENCY_UI):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail={"code": "invalid_via", "detail": "via=recurrence is the server's."},
+            detail={"code": "invalid_via", "detail": f"via={via} is the server's."},
         )
     if (via == Via.AUTOMATION) != (x_acting_user == AUTOMATION_USER_ID):
         raise HTTPException(
