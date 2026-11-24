@@ -30,7 +30,11 @@ jobs:
         run: |
           uv build --wheel --out-dir ../dist
           cp requirements.txt ../dist/requirements.txt
-          cd ../dist && sha256sum -- *.whl requirements.txt > SHA256SUMS
+          # LXC admin tools; haushalttickets-update installs them from the release
+          cp ../deploy/lxc/haushalttickets-update ../deploy/lxc/haushalttickets-backup \
+            ../deploy/lxc/haushalttickets-ctl ../dist/
+          cd ../dist && sha256sum -- *.whl requirements.txt haushalttickets-update \
+            haushalttickets-backup haushalttickets-ctl > SHA256SUMS
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

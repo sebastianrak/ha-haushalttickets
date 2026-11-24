@@ -15,7 +15,7 @@
  *
  * MIT-Lizenz
  */
-const HT_VERSION = "0.3.0";
+const HT_VERSION = "0.3.1";
 
 const HT_TEXTE = {
   de: {
@@ -40,6 +40,7 @@ const HT_TEXTE = {
     freigabeAbgelehnt: "Freigabe abgelehnt", freigegeben: "Freigegeben", freigeben: "Freigeben", ablehnen: "Ablehnen",
     keinZugriff: "Haushalttickets ist nicht erreichbar.", laedt: "Lädt …", angelegt: "angelegt", statusAuf: "Status →",
     geaendert: "geändert", entfernen: "Entfernen?", fotosNachher: "Fotos", via_ai: "über KI",
+    liest: "Liest …", nichtLesbar: "Datei nicht lesbar", hochladenFehler: "Hochladen fehlgeschlagen",
     felder: {
       title: "Titel", description: "Beschreibung", urgency: "Dringlichkeit", importance: "Herzen", due_date: "Fälligkeit",
       ha_area_id: "Bereich", ha_device_id: "Gerät", ha_targets: "Entitäten", price_estimated: "Preis geschätzt",
@@ -89,6 +90,7 @@ const HT_TEXTE = {
     freigabeAbgelehnt: "Approval declined", freigegeben: "Approved", freigeben: "Approve", ablehnen: "Decline",
     keinZugriff: "Haushalttickets cannot be reached.", laedt: "Loading …", angelegt: "created", statusAuf: "Status →",
     geaendert: "changed", entfernen: "Remove?", fotosNachher: "Photos", via_ai: "via AI",
+    liest: "Reading …", nichtLesbar: "File not readable", hochladenFehler: "Upload failed",
     felder: {
       title: "Title", description: "Description", urgency: "Urgency", importance: "Hearts", due_date: "Due date",
       ha_area_id: "Area", ha_device_id: "Device", ha_targets: "Entities", price_estimated: "Estimated price",
@@ -112,6 +114,10 @@ const HT_SPALTEN = [
   { key: "done", icon: "mdi:check-circle-outline", farbe: "#81c784", archiv: true },
   { key: "rejected", icon: "mdi:weather-night", farbe: "#9575cd", archiv: true },
 ];
+// Dateien, die schon im Speicher liegen (nicht noch einmal verkleinern)
+const HT_EINGELESEN = new WeakSet();
+// Platz für den Multipart-Rahmen unter Home Assistants Grenze von 16 MiB
+const HT_MAX_UPLOAD = 16 * 1024 * 1024 - 64 * 1024;
 const HT_DRINGLICH = { someday: "#78909c", this_week: "#ffb74d", burning: "#ef5350" };
 const HT_DRINGLICH_RANG = { burning: 0, this_week: 1, someday: 2 };
 const HT_TYPEN = { repair: "mdi:wrench-outline", purchase: "mdi:cart-outline", home_assistant: "mdi:home-assistant" };
@@ -561,7 +567,7 @@ class HaushaltticketsCard extends HTMLElement {
         <label class="haken"><input type="checkbox" class="kd" ${w.ai_draft_requested ? "checked" : ""}>${htEsc(t.kiEntwurf)}</label>
         ${w.type === "home_assistant" ? `<label class="haken"><input type="checkbox" class="ku" ${w.ai_implement_approved ? "checked" : ""}>${htEsc(t.kiUmsetzen)}</label>` : ""}
       </div>` : ""}
-      ${neu ? `<label>${htEsc(t.fotosNachher)}</label><div class="hoch"><label class="knopf"><ha-icon icon="mdi:camera-plus-outline"></ha-icon>${htEsc(t.foto)}<input type="file" class="vorab" accept="image/*,application/pdf" multiple hidden></label><span class="vorabliste"></span></div>`
+      ${neu ? `<label>${htEsc(t.fotosNachher)}</label><div class="hoch"><label class="knopf"><ha-icon icon="mdi:camera-plus-outline"></ha-icon>${htEsc(t.foto)}<input type="file" class="vorab" accept="image/*,application/pdf" multiple hidden></label><span class="vorabliste">${htEsc(w.dateien.map((f) => f.name).join(", "))}</span></div>`
         : `<div class="neben"></div>`}
       <div class="fuss">${!neu && this._rolle() === "admin" ? `<button class="weg">${htEsc(t.loeschen)}</button>` : ""}<span></span><button class="ok">${htEsc(neu ? t.anlegen : t.speichern)}</button></div>
     </div>`;
@@ -620,9 +626,17 @@ class HaushaltticketsCard extends HTMLElement {
     }));
     const vorab = d.querySelector(".vorab");
     if (vorab) vorab.addEventListener("change", () => {
-      w.dateien = w.dateien.concat([...vorab.files]);
-      d.querySelector(".vorabliste").textContent = w.dateien.map((f) => f.name).join(", ");
+      const gewaehlt = [...vorab.files];
       vorab.value = "";
+      const liste = d.querySelector(".vorabliste");
+      liste.textContent = t.liest;
+      // sofort lesen: in der iOS-App ist die Datei beim Speichern sonst oft nicht mehr lesbar
+      w.einlesen = (w.einlesen || Promise.resolve()).then(async () => {
+        for (const datei of gewaehlt) {
+          try { w.dateien.push(await this._einlesen(datei)); } catch (e) { this._hinweis({ message: `${t.nichtLesbar}: ${datei.name}` }); }
+        }
+        liste.textContent = w.dateien.map((f) => f.name).join(", ");
+      });
     });
     ueber.querySelector(".schleier").addEventListener("click", () => this._zu_());
     d.querySelector(".zu").addEventListener("click", () => this._zu_());
@@ -685,6 +699,7 @@ class HaushaltticketsCard extends HTMLElement {
     }
     let ticket;
     if (!(await this._aktion(async () => { ticket = await this._ws("POST", "/api/v1/tickets", { body }); }))) return false;
+    await w.einlesen;
     for (const datei of w.dateien) await this._hochladen(ticket.id, datei, null);
     return true;
   }
@@ -818,8 +833,21 @@ class HaushaltticketsCard extends HTMLElement {
     }
   }
 
+  // Datei vollständig in den Speicher holen (Fotos dabei verkleinern)
+  async _einlesen(datei) {
+    if (HT_EINGELESEN.has(datei)) return datei;
+    let fertig = await this._verkleinern(datei);
+    if (fertig === datei) fertig = new File([await datei.arrayBuffer()], datei.name, { type: datei.type || "application/octet-stream" });
+    HT_EINGELESEN.add(fertig);
+    return fertig;
+  }
+
   async _hochladen(ticketId, datei, art) {
-    const fertig = await this._verkleinern(datei);
+    const t = this._t;
+    let fertig;
+    try { fertig = await this._einlesen(datei); } catch (e) { this._hinweis({ message: `${t.nichtLesbar}: ${datei.name}` }); return false; }
+    // Home Assistant nimmt höchstens 16 MiB je Anfrage an und bricht größere mitten im Senden ab
+    if (fertig.size > HT_MAX_UPLOAD) { this._hinweis({ code: "too_large" }); return false; }
     const form = new FormData();
     form.append("file", fertig, fertig.name);
     form.append("kind", art || (fertig.type.startsWith("image/") ? "photo" : "document"));
@@ -833,7 +861,8 @@ class HaushaltticketsCard extends HTMLElement {
       }
       return true;
     } catch (e) {
-      this._hinweis(e);
+      const mb = (fertig.size / 1048576).toLocaleString(this._hass.language || "de", { maximumFractionDigits: 1 });
+      this._hinweis({ message: `${t.hochladenFehler}: ${fertig.name} (${mb} MB) – ${(e && e.message) || e}` });
       return false;
     }
   }

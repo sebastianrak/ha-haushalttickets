@@ -4,6 +4,10 @@
 # Dumps older than KEEP_DAYS (default 14) are removed. Attachments are plain files in
 # /var/lib/haushalttickets and are covered by vzdump directly.
 set -euo pipefail
+# `pct enter` passes the Proxmox host's locale (e.g. en_US.UTF-8), which the container
+# does not have; C.UTF-8 always exists.
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+unset LANGUAGE
 
 BACKUP_DIR="/var/backups/haushalttickets"
 KEEP_DAYS="${KEEP_DAYS:-14}"

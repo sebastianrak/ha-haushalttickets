@@ -134,4 +134,64 @@ await tick(); await tick();
 const create = sent.find((m) => m.method === "POST" && m.path === "/api/v1/tickets");
 same(create.body, { type: "purchase", title: "Akkuschrauber", urgency: "this_week", assignee_ids: ["u-robin"], price_estimated: "49.90" });
 
+// Fotos im Dialog „Neues Ticket“: sofort eingelesen, auch wenn die Originaldatei danach
+// nicht mehr lesbar ist (iOS-App); zu große Dateien und Netzwerkfehler werden klar gemeldet
+// (jsdom 24 kennt Blob.arrayBuffer nicht, Browser schon)
+window.Blob.prototype.arrayBuffer = function () {
+  return new Promise((ok, fail) => {
+    const r = new window.FileReader();
+    r.onload = () => ok(r.result);
+    r.onerror = () => fail(r.error);
+    r.readAsArrayBuffer(this);
+  });
+};
+const hinweise = [];
+window.document.addEventListener("hass-notification", (e) => hinweise.push(e.detail.message));
+const uploads = [];
+let netzFehler = false;
+hass.fetchWithAuth = async (url, opts) => {
+  if (!opts) return { ok: true, blob: async () => new window.Blob(["x"]) };
+  if (netzFehler) throw new window.TypeError("Load failed");
+  uploads.push({ url, datei: opts.body.get("file") });
+  return { ok: true, status: 201, json: async () => ({}) };
+};
+const waehlen = async (input, dateien) => {
+  Object.defineProperty(input, "files", { value: dateien, configurable: true });
+  input.dispatchEvent(new window.Event("change"));
+  await tick();
+};
+
+root.querySelector(".plus").click();
+await tick();
+const p3 = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+p3.querySelector(".dtitel").value = "Wasserhahn tropft";
+const original = new window.File(["jpegdaten"], "IMG_1567.jpg", { type: "image/jpeg" });
+let gelesen = 0;
+original.arrayBuffer = function () { gelesen += 1; return window.Blob.prototype.arrayBuffer.call(this); };
+await waehlen(p3.querySelector(".vorab"), [original]);
+assert.equal(gelesen, 1, "read when selected, not when saved");
+assert.match(p3.querySelector(".vorabliste").textContent, /IMG_1567\.jpg/);
+original.arrayBuffer = () => Promise.reject(new window.Error("NotReadableError"));   // iOS gibt die Datei frei
+p3.querySelector(".ok").click();
+await tick(); await tick();
+assert.equal(uploads.length, 1, "photo uploaded after create");
+assert.equal(uploads[0].url, "/api/haushalttickets/tickets/99/attachments");
+assert.equal(uploads[0].datei.size, original.size);
+same(hinweise, []);
+
+// Ticket #2: zu große Datei wird nicht gesendet, Netzwerkfehler nennt Datei und Größe
+root.querySelector('.karte[data-id="2"]').click();
+await tick(); await tick();
+const p4 = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+const fotoFeld = p4.querySelector('.hoch input[data-k="photo"]');
+uploads.length = 0;
+await waehlen(fotoFeld, [new window.File([new Uint8Array(17 * 1024 * 1024)], "riesig.pdf", { type: "application/pdf" })]);
+await tick();
+assert.equal(uploads.length, 0, "too large: not sent");
+assert.equal(hinweise.pop(), "Die Datei ist zu groß.");
+netzFehler = true;
+await waehlen(fotoFeld, [new window.File(["abc"], "scan.pdf", { type: "application/pdf" })]);
+await tick();
+assert.match(hinweise.pop(), /^Hochladen fehlgeschlagen: scan\.pdf \(0 MB\) – Load failed$/);
+
 console.log("card smoke test ok");
