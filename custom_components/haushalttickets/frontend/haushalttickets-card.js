@@ -36,6 +36,10 @@ const HT_TEXTE = {
     kostenGeschaetzt: "Kosten geschätzt (€)", kostenTatsaechlich: "Kosten tatsächlich (€)", garantiefall: "Garantiefall",
     bezug: "Gehört zu Anschaffung", keinBezug: "Keine", entitaeten: "Betroffene Entitäten (kommagetrennt)",
     ki: "KI", kiEntwurf: "KI soll entwerfen", kiUmsetzen: "KI soll umsetzen", checkliste: "Checkliste",
+    kiUmsetzenV: "KI soll Entwurf v%v umsetzen", kiKeinEntwurf: "Umsetzen geht erst mit einem Entwurf.",
+    kiNeuerEntwurf: "Ein neuer Entwurf ist angefragt; danach freigeben.", kiEntwuerfe: "KI-Entwürfe",
+    kiEntwurfV: "Entwurf v%v", kiAenderungen: "Änderungen der KI in Home Assistant",
+    kiNeustart: "wirksam erst nach Neuladen/Neustart", kiFreigabeFuer: "freigegeben",
     punkt: "Neuer Punkt …", anhaenge: "Fotos und Dateien", foto: "Foto", rechnung: "Rechnung", datei: "Datei",
     laedtHoch: "Lädt hoch …", freigabe: "Freigabe", freigabeOffen: "Wartet auf Freigabe durch die zweite erwachsene Person",
     freigabeAbgelehnt: "Freigabe abgelehnt", freigegeben: "Freigegeben", freigeben: "Freigeben", ablehnen: "Ablehnen",
@@ -60,10 +64,13 @@ const HT_TEXTE = {
       checklist_added: "Checkliste +", checklist_removed: "Checkliste −", checklist_text: "Checkliste",
       checklist_done: "Checkliste ✓", attachment_added: "Anhang +", attachment_removed: "Anhang −",
       ai_draft_requested: "KI-Entwurf", ai_implement_approved: "KI-Umsetzung", admin_override: "Admin-Abnahme",
+      ai_draft: "KI-Entwurf (Version)", ai_change: "KI-Änderung",
       series_id: "Wiederholung",
     },
     fehler: {
       ai_series_forbidden: "Wiederkehrende Tickets legt die KI nicht an.",
+      no_draft: "Umsetzen geht erst, wenn ein Entwurf da ist.",
+      draft_pending: "Ein neuer Entwurf ist angefragt; erst danach freigeben.",
       series_forbidden: "Kinder verwalten nur ihre eigenen wiederkehrenden Tickets.",
       already_in_series: "Dieses Ticket wiederholt sich schon.",
       first_due_required: "Dafür braucht es ein Fälligkeitsdatum.",
@@ -100,6 +107,10 @@ const HT_TEXTE = {
     kostenGeschaetzt: "Estimated cost (€)", kostenTatsaechlich: "Actual cost (€)", garantiefall: "Warranty case",
     bezug: "Belongs to purchase", keinBezug: "None", entitaeten: "Affected entities (comma separated)",
     ki: "AI", kiEntwurf: "AI should draft", kiUmsetzen: "AI should implement", checkliste: "Checklist",
+    kiUmsetzenV: "AI should implement draft v%v", kiKeinEntwurf: "Implementing needs a draft first.",
+    kiNeuerEntwurf: "A new draft is requested; approve it once it is in.", kiEntwuerfe: "AI drafts",
+    kiEntwurfV: "Draft v%v", kiAenderungen: "Changes the AI made in Home Assistant",
+    kiNeustart: "takes effect after a reload/restart", kiFreigabeFuer: "approved",
     punkt: "New item …", anhaenge: "Photos and files", foto: "Photo", rechnung: "Invoice", datei: "File",
     laedtHoch: "Uploading …", freigabe: "Approval", freigabeOffen: "Waiting for the second adult's approval",
     freigabeAbgelehnt: "Approval declined", freigegeben: "Approved", freigeben: "Approve", ablehnen: "Decline",
@@ -124,6 +135,7 @@ const HT_TEXTE = {
       checklist_added: "Checklist +", checklist_removed: "Checklist −", checklist_text: "Checklist",
       checklist_done: "Checklist ✓", attachment_added: "Attachment +", attachment_removed: "Attachment −",
       ai_draft_requested: "AI draft", ai_implement_approved: "AI implementation", admin_override: "Admin acceptance",
+      ai_draft: "AI draft (version)", ai_change: "AI change",
       series_id: "Repeat",
     },
     fehler: {},
@@ -530,12 +542,15 @@ class HaushaltticketsCard extends HTMLElement {
     if (!d || !d.id) return false;
     try {
       const base = `/api/v1/tickets/${d.id}`;
-      const [ticket, kommentare, verlauf, anhaenge] = await Promise.all([
+      const leer = () => [];   // Server vor 0.8.0 kennt keine Entwürfe
+      const [ticket, kommentare, verlauf, anhaenge, entwuerfe, aenderungen] = await Promise.all([
         this._ws("GET", base), this._ws("GET", base + "/comments"), this._ws("GET", base + "/history"), this._ws("GET", base + "/attachments"),
+        this._ws("GET", base + "/drafts").catch(leer), this._ws("GET", base + "/changes").catch(leer),
       ]);
       if (this._dialog !== d) return true;
       const offenerEntwurf = d.w && d.ticket && d.ticket.id === ticket.id;
       d.ticket = ticket; d.kommentare = kommentare; d.verlauf = verlauf; d.anhaenge = anhaenge;
+      d.entwuerfe = Array.isArray(entwuerfe) ? entwuerfe : []; d.aenderungen = Array.isArray(aenderungen) ? aenderungen : [];
       if (offenerEntwurf) { this._nebenbereicheZeichnen(); return true; }   // Eingaben im offenen Dialog nicht überschreiben
       d.w = {
         type: ticket.type, title: ticket.title, description: ticket.description || "", status: ticket.status,
@@ -620,7 +635,7 @@ class HaushaltticketsCard extends HTMLElement {
       <details class="mehrfelder" ${neu ? "" : "open"}><summary>${htEsc(t.details)}</summary><div class="typfelder">${this._typfelder(w)}</div></details>
       ${erwachsen && !neu ? `<label>${htEsc(t.ki)}</label><div class="kiflags">
         <label class="haken"><input type="checkbox" class="kd" ${w.ai_draft_requested ? "checked" : ""}>${htEsc(t.kiEntwurf)}</label>
-        ${w.type === "home_assistant" ? `<label class="haken"><input type="checkbox" class="ku" ${w.ai_implement_approved ? "checked" : ""}>${htEsc(t.kiUmsetzen)}</label>` : ""}
+        ${w.type === "home_assistant" ? this._kiUmsetzen(tk, w) : ""}
       </div>` : ""}
       ${neu ? `<label>${htEsc(t.fotosNachher)}</label><div class="hoch"><label class="knopf"><ha-icon icon="mdi:camera-plus-outline"></ha-icon>${htEsc(t.foto)}<input type="file" class="vorab" accept="image/*,application/pdf" multiple hidden></label><span class="vorabliste">${htEsc(w.dateien.map((f) => f.name).join(", "))}</span></div>`
         : `<div class="neben"></div>`}
@@ -630,6 +645,33 @@ class HaushaltticketsCard extends HTMLElement {
     this._dialogVerdrahten(ueber, dlg);
     if (!neu) this._nebenbereicheZeichnen();
     else setTimeout(() => { const f = dlg.querySelector(".dtitel"); if (f) f.focus(); }, 50);
+  }
+
+  // „KI soll umsetzen“ gilt für genau einen Entwurf (Entscheidung 50)
+  _kiUmsetzen(tk, w) {
+    const t = this._t;
+    const v = tk.ai_implement_approved ? tk.ai_implement_draft_version : tk.latest_draft_version;
+    const frei = !!v && !w.ai_draft_requested;
+    const text = v ? t.kiUmsetzenV.replace("%v", v) : t.kiUmsetzen;
+    const hinweis = !tk.latest_draft_version ? t.kiKeinEntwurf : w.ai_draft_requested ? t.kiNeuerEntwurf : "";
+    return `<label class="haken ${frei ? "" : "aus"}"><input type="checkbox" class="ku" ${w.ai_implement_approved && frei ? "checked" : ""} ${frei ? "" : "disabled"}>${htEsc(text)}</label>
+      <span class="hinweis kuh">${htEsc(hinweis)}</span>`;
+  }
+
+  // Entwürfe und Änderungen der KI (alle dürfen sie lesen)
+  _kiBereich(d) {
+    const t = this._t, tk = d.ticket, sprache = this._hass.language || "de";
+    const entwuerfe = (d.entwuerfe || []).slice(0, 5), aenderungen = d.aenderungen || [];
+    if (!entwuerfe.length && !aenderungen.length) return "";
+    const datum = (x) => new Date(x).toLocaleString(sprache, { dateStyle: "short", timeStyle: "short" });
+    const freigegeben = tk.ai_implement_approved ? tk.ai_implement_draft_version : null;
+    return `${entwuerfe.length ? `<label>${htEsc(t.kiEntwuerfe)}</label><div class="kientw">${entwuerfe.map((e, i) => `<details ${i === 0 ? "open" : ""}>
+        <summary>${htEsc(t.kiEntwurfV.replace("%v", e.version))} · ${htEsc(datum(e.created_at))}${e.version === freigegeben ? ` · <b>${htEsc(t.kiFreigabeFuer)}</b>` : ""}</summary>
+        <div class="kitext">${htEsc(e.body)}</div></details>`).join("")}</div>` : ""}
+      ${aenderungen.length ? `<label>${htEsc(t.kiAenderungen)}</label><div class="kiaend">${aenderungen.map((a) => `<div class="kia">
+        <div>${htEsc(a.summary)}</div>
+        <span>${htEsc(datum(a.created_at))}${a.git_commit ? ` · ${htEsc(a.git_commit.slice(0, 10))}` : ""}${a.needs_restart ? ` · ${htEsc(t.kiNeustart)}` : ""}</span>
+        ${a.objects.length ? `<span>${htEsc(a.objects.join(", "))}</span>` : ""}</div>`).join("")}</div>` : ""}`;
   }
 
   _freigabeBox(tk) {
@@ -660,6 +702,18 @@ class HaushaltticketsCard extends HTMLElement {
     });
     const wt = d.querySelector(".wt");
     if (wt) wt.addEventListener("change", () => { if (htSpalte(w.status) === "in_progress") w.status = wt.checked ? "waiting_for_parts" : "in_progress"; });
+    // Neuer Entwurf angefragt → Freigabe zum Umsetzen fällt weg (Server macht dasselbe)
+    const kd = d.querySelector(".kd");
+    if (kd && this._dialog.ticket) kd.addEventListener("change", () => {
+      const tk = this._dialog.ticket, box = d.querySelector(".kiflags");
+      w.ai_draft_requested = kd.checked;
+      if (kd.checked) w.ai_implement_approved = false;
+      const alt = box && box.querySelector(".ku");
+      if (alt && w.type === "home_assistant") {
+        alt.closest("label").nextElementSibling.remove();
+        alt.closest("label").outerHTML = this._kiUmsetzen(tk, w);
+      }
+    });
     if (this._erwachsen()) seg("pe", (v, b) => {
       w.assignee_ids = w.assignee_ids.includes(v) ? w.assignee_ids.filter((x) => x !== v) : w.assignee_ids.concat([v]);
       b.classList.toggle("an", w.assignee_ids.includes(v));
@@ -968,7 +1022,7 @@ class HaushaltticketsCard extends HTMLElement {
     if (!box || !d || !d.ticket) return;
     const t = this._t, tk = d.ticket, ich = this._ich(), admin = this._rolle() === "admin";
     const bild = (a) => a.content_type.startsWith("image/");
-    box.innerHTML = `
+    box.innerHTML = `${this._kiBereich(d)}
       <label>${htEsc(t.checkliste)}</label>
       <div class="liste">${tk.checklist.map((c) => `<div class="punkt" data-c="${c.id}"><label class="haken"><input type="checkbox" ${c.done ? "checked" : ""}><span>${htEsc(c.text)}</span></label><button class="x" title="${htEsc(t.loeschen)}"><ha-icon icon="mdi:close"></ha-icon></button></div>`).join("")}
         <div class="punktneu"><input type="text" placeholder="${htEsc(t.punkt)}"><button class="add"><ha-icon icon="mdi:plus"></ha-icon></button></div></div>
@@ -1229,6 +1283,11 @@ ha-card { padding: 14px 14px 16px; overflow: hidden; }
 .bildgross img { max-width:100%; max-height:100%; object-fit:contain; }
 .bildgross .x { position:absolute; top: calc(10px + env(safe-area-inset-top, 0px)); right:10px; color:#fff; }
 .verlauf { display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto; }
+.kientw details, .kia { margin:4px 0; padding:7px 10px; border-radius:10px; background:var(--tb-glas); font-size:13px; }
+.kientw summary { cursor:pointer; color:var(--secondary-text-color); }
+.kitext { white-space:pre-wrap; margin-top:6px; max-height:320px; overflow:auto; }
+.kia span { display:block; font-size:11.5px; color:var(--secondary-text-color); margin-top:2px; }
+.kiflags .haken.aus { opacity:.55; } .kiflags .kuh { display:block; font-size:12px; }
 .ve { font-size:12.5px; color:var(--secondary-text-color); } .ve span { font-size:11px; opacity:.8; }
 .ve p { margin:3px 0 0; padding:7px 10px; border-radius:10px; background:var(--tb-glas); color:var(--primary-text-color); }
 .ve i { display:block; margin-top:1px; }

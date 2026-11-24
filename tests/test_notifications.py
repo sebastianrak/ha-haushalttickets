@@ -207,6 +207,79 @@ def test_due_reminders() -> None:
     assert sent["person.kind"].title == "Fällige Tickets"
 
 
+def _nightly(payload: dict) -> dict:
+    return {
+        "type": "nightly_run_finished",
+        "ticket_id": None,
+        "actor_id": "ki",
+        "via": "nightly_run",
+        "payload": payload,
+        "ticket": None,
+    }
+
+
+def test_nightly_run_is_one_summary_per_person() -> None:
+    """No single pushes for the run's actions; one summary per person afterwards."""
+    for kind in ("comment_added", "status_changed", "draft_created"):
+        event = _event(kind, "ki", {"new": "acceptance"}, requested_by_id="robin")
+        event["via"] = "nightly_run"
+        assert notifications_for(event, DATA, "de") == []
+
+    results = [
+        {"ticket_id": 3, "title": "Licht Flur", "kind": "draft", "version": 2,
+         "requested_by_id": "robin", "assignee_ids": []},
+        {"ticket_id": 4, "title": "KNX Szene", "kind": "implemented", "version": 1,
+         "needs_restart": True, "requested_by_id": "robin", "assignee_ids": ["kind"]},
+    ]  # fmt: skip
+    sent = _by_person(
+        notifications_for(_nightly({"outcome": "done", "results": results}), DATA, "de")
+    )
+    assert set(sent) == {"person.robin", "person.kind"}
+    robin = sent["person.robin"]
+    assert robin.kind == "nightly"
+    assert robin.title == "KI-Hausmeister: Nachtlauf"
+    assert robin.message == (
+        f"#3 Licht Flur {DASH} Entwurf v2 bereit\n"
+        f"#4 KNX Szene {DASH} umgesetzt {DASH} bitte abnehmen"
+        " (wirksam erst nach Neuladen/Neustart)"
+    )
+    assert robin.ticket_id is None  # two tickets: open the board
+    assert sent["person.kind"].ticket_id == 4
+
+
+def test_nightly_problems_reach_the_admins() -> None:
+    """Failures and aborted runs go to the admins, with the failed tickets."""
+    results = [
+        {"ticket_id": 5, "title": "Heizung", "kind": "failed", "phase": "implement",
+         "retry": False, "requested_by_id": "robin", "assignee_ids": []},
+    ]  # fmt: skip
+    payload = {"outcome": "aborted", "notes": "Zeitgrenze", "results": results}
+    sent = _by_person(notifications_for(_nightly(payload), DATA, "de"))
+    assert set(sent) == {"person.alex", "person.robin"}
+    alex = sent["person.alex"]
+    assert alex.kind == "nightly_problem"
+    assert alex.message.splitlines() == [
+        "Der Nachtlauf hat die Zeitgrenze erreicht; offene Tickets folgen nächste Nacht.",
+        "Zeitgrenze",
+        f"#5 Heizung {DASH} nicht geschafft",
+    ]
+    assert sent["person.robin"].kind == "nightly"
+
+    missing = {
+        "type": "nightly_run_missing",
+        "ticket_id": None,
+        "actor_id": None,
+        "via": "system",
+        "payload": {"hours": 26, "pending": 2},
+        "ticket": None,
+    }
+    sent = _by_person(notifications_for(missing, DATA, "en"))
+    assert set(sent) == {"person.alex"}
+    assert sent["person.alex"].message == (
+        "No nightly run for over 26 h, 2 ticket(s) waiting."
+    )
+
+
 # --- against the real server -------------------------------------------------
 
 

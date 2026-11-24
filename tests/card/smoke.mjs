@@ -65,6 +65,15 @@ const hass = {
         if (path.endsWith("comments")) return [{ id: 1, ticket_id: 2, author_id: "u-robin", body: "Hallo", via: "mcp", created_at: now }];
         return [{ id: "a9", ticket_id: 2, kind: "invoice", filename: "rechnung.pdf", content_type: "application/pdf", size: 1, sha256: "", uploaded_by_id: "u-alex", uploaded_via: "ui", created_at: now }];
       }
+      if (path === "/api/v1/tickets/3" && method === "GET") return { ...open[2], latest_draft_version: 2, ai_implement_draft_version: null };
+      if (path === "/api/v1/tickets/3/drafts") return [
+        { id: 2, ticket_id: 3, version: 2, body: "Plan v2:\n- Automation <b>Licht</b>", run_id: 1, created_at: now },
+        { id: 1, ticket_id: 3, version: 1, body: "Plan v1", run_id: 1, created_at: now },
+      ];
+      if (path === "/api/v1/tickets/3/changes") return [
+        { id: 1, ticket_id: 3, run_id: 1, summary: "Paket knx.yaml ergänzt", objects: ["packages/knx.yaml"], git_commit: "0123456789abcdef", needs_restart: true, created_at: now },
+      ];
+      if (/\/api\/v1\/tickets\/3\/(comments|history|attachments)/.test(path)) return [];
       if (method === "POST" && path === "/api/v1/tickets") return ticket(99, msg.body);
       if (path === "/api/v1/series" && method === "GET") return serien;
       if (path === "/api/v1/series" && method === "POST") return { id: 9, appears_on: "2099-01-01", ...msg.body };
@@ -277,5 +286,36 @@ sent.length = 0;
 window.dispatchEvent(new window.Event("location-changed"));
 await tick();
 assert.ok(!sent.some((m) => /\/api\/v1\/tickets\/\w+$/.test(m.path)), "no ticket for a bad number");
+
+// KI: Entwürfe und Änderungen lesen, Freigabe gilt für Entwurf v2
+card._zu_();
+root.querySelector('.karte[data-id="3"]').click();
+await tick(); await tick();
+let p6 = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+const kientw = p6.querySelector(".kientw");
+assert.ok(kientw, "drafts shown");
+assert.match(kientw.textContent, /Entwurf v2/);
+assert.ok(!p6.querySelector(".kitext b"), "draft text is escaped");
+assert.match(p6.querySelector(".kiaend").textContent, /0123456789 · wirksam erst nach Neuladen\/Neustart/);
+let ku = p6.querySelector(".ku");
+assert.equal(ku.disabled, false);
+assert.match(ku.closest("label").textContent, /KI soll Entwurf v2 umsetzen/);
+ku.checked = true;
+sent.length = 0;
+p6.querySelector(".ok").click();
+await tick(); await tick();
+same(sent.find((m) => m.path === "/api/v1/tickets/3/ai-flags").body, { implement_approved: true });
+// Neuen Entwurf anfordern sperrt das Umsetzen
+card._zu_();
+root.querySelector('.karte[data-id="3"]').click();
+await tick(); await tick();
+p6 = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+const kd = p6.querySelector(".kd");
+kd.checked = true;
+kd.dispatchEvent(new window.Event("change"));
+ku = p6.querySelector(".ku");
+assert.equal(ku.disabled, true);
+assert.match(p6.querySelector(".kiflags").textContent, /Ein neuer Entwurf ist angefragt/);
+card._zu_();
 
 console.log("card smoke test ok");
