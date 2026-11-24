@@ -53,19 +53,6 @@ jobs:
         working-directory: .
         run: shellcheck deploy/proxmox/*.sh deploy/lxc/*.sh deploy/lxc/haushalttickets-*
 
-  spike:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: spike
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.14"
-      - run: uv venv && uv pip install -r requirements_test.txt
-      - run: .venv/bin/python -m pytest -q
-
   integration:
     runs-on: ubuntu-latest
     services:

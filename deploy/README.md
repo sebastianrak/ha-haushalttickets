@@ -62,6 +62,16 @@ journalctl -u haushalttickets -f        # logs
 verified against `SHA256SUMS`, dependencies against the hashes in `requirements.txt`),
 runs the migrations, restarts the service and checks `/api/health`.
 
+Without `--release` it installs GitHub's *latest* release, which never is a
+pre-release: install a pre-release with `--release v<version>`.
+
+## Publishing a release
+
+Push a tag (`git tag v0.4.0 && git push origin v0.4.0`) or create the release in the
+GitHub UI. The tag must match the server and integration version. The *Release*
+workflow builds the wheel and attaches it with `requirements.txt` and `SHA256SUMS`;
+`haushalttickets-update` refuses a release without these assets.
+
 ## Restore a dump
 
 ```bash
