@@ -7,7 +7,7 @@ from pathlib import Path
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import CONF_API_TOKEN, CONF_URL, Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -16,9 +16,10 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
 from .api import ApiError, CannotConnect, HaushaltticketsClient, InvalidAuth
-from .const import CARD_URL, DOMAIN
+from .const import CARD_URL, DOMAIN, EVENT_NOTIFICATION_ACTION
 from .coordinator import HaushaltticketsConfigEntry, HaushaltticketsCoordinator
 from .llm_api import async_register_llm_api
+from .notifications import async_handle_action
 from .services import async_setup_services
 from .views import AttachmentView, UploadView
 from .websocket import async_setup_websocket
@@ -77,6 +78,14 @@ async def async_setup_entry(
     coordinator.async_setup_user_listeners()
     # Ticket tools for AI assistants (mcp_server serves them to claude.ai).
     entry.async_on_unload(async_register_llm_api(hass, coordinator))
+    # Buttons in mobile app notifications act for the person who tapped them.
+
+    async def _notification_action(event: Event) -> None:
+        await async_handle_action(hass, coordinator, event)
+
+    entry.async_on_unload(
+        hass.bus.async_listen(EVENT_NOTIFICATION_ACTION, _notification_action)
+    )
 
     @callback
     def _sync_after_start(_hass: HomeAssistant) -> None:

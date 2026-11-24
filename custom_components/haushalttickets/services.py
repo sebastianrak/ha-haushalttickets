@@ -17,6 +17,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service import async_register_admin_service
+from homeassistant.util import dt as dt_util
 import probatio
 
 from .api import AUTOMATION, Acting, ApiError, CannotConnect, InvalidAuth
@@ -41,6 +42,7 @@ from .const import (
     SERVICE_ADD_COMMENT,
     SERVICE_ASSIGN,
     SERVICE_CREATE_TICKET,
+    SERVICE_SEND_DUE_REMINDERS,
     SERVICE_SET_ROLE,
     SERVICE_SET_STATUS,
     STATUSES,
@@ -48,6 +50,7 @@ from .const import (
     URGENCIES,
 )
 from .coordinator import HaushaltticketsCoordinator, ticket_summary
+from .notifications import due_notifications, fire
 
 _TICKET_ID = probatio.All(probatio.Coerce(int), probatio.Range(min=1))
 
@@ -249,6 +252,27 @@ async def _add_comment(call: ServiceCall) -> None:
     )
 
 
+async def _send_due_reminders(call: ServiceCall) -> ServiceResponse:
+    """One summary per person: overdue, due today and due tomorrow."""
+    hass = call.hass
+    coordinator = get_coordinator(hass)
+    await coordinator.async_refresh()
+    if not coordinator.last_update_success or coordinator.data is None:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="cannot_connect",
+            translation_placeholders={"error": str(coordinator.last_exception)},
+        )
+    notifications = due_notifications(
+        coordinator.data.tickets,
+        coordinator.data,
+        dt_util.now().date(),
+        hass.config.language,
+    )
+    fire(hass, notifications)
+    return {"notifications": len(notifications)}
+
+
 async def _assign(call: ServiceCall) -> ServiceResponse:
     hass = call.hass
     coordinator = get_coordinator(hass)
@@ -319,6 +343,13 @@ def async_setup_services(hass: HomeAssistant) -> None:
     # Home Assistant admins only; the server also requires its own admin role.
     async_register_admin_service(
         hass, DOMAIN, SERVICE_SET_ROLE, _set_role, schema=SET_ROLE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEND_DUE_REMINDERS,
+        _send_due_reminders,
+        schema=probatio.Schema({}),
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,

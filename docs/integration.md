@@ -86,6 +86,94 @@ actions:
       message: "Bitte abnehmen: #{{ trigger.event.data.ticket.id }} {{ trigger.event.data.ticket.title }}"
 ```
 
+## Notifications
+
+The integration decides who hears about what and fires one
+`haushalttickets_notification` event per person. Delivering it (which device, which
+channel, quiet hours) is up to an automation, so it stays editable in the UI.
+
+| Server event | Who is notified |
+|---|---|
+| New ticket, urgency *burning* | all active adults (urgent) |
+| New ticket with assignees, assignees added | the new assignees |
+| Urgency changed to *burning* | all active adults (urgent) |
+| Approval requested | the adults except the requester, with buttons *Approve* / *Decline* |
+| Approval decided | the requester |
+| Status → acceptance | the requester, with the button *Accept* |
+| Status → done / dream on | the requester |
+| Comment | requester and assignees |
+| Everything else (fields, photos, checklist) | nobody |
+
+Nobody is told about their own action. Only active members with a person entity are
+notified, never AI accounts. Changes made through AI tools say so ("… via AI").
+
+```yaml
+user_id: <HA user id>
+person: person.robin
+kind: approval_requested    # burning, assigned, approved, declined, acceptance, done,
+                            # rejected, comment, due, action_failed
+title: Approval needed
+message: "#7 Washing machine – by Alex\nestimated €899.00"
+ticket_id: 7
+urgent: false               # true for burning tickets
+actions:                    # for the mobile app; empty for most kinds
+  - action: HAUSHALTTICKETS_APPROVE_7
+    title: Approve
+    authenticationRequired: true
+```
+
+Texts follow the Home Assistant language (German or English).
+
+### Buttons
+
+Pass `actions` on to the Home Assistant mobile app (`data.actions`). A tap fires
+`mobile_app_notification_action` for the user of that phone; the integration then
+approves, declines or accepts **as that person**, so the server rules apply to them.
+A refused tap comes back as a notification of kind `action_failed` with the reason.
+Automations cannot do this themselves: they act without a user, as "Automation".
+
+### Delivery example
+
+```yaml
+alias: Haushalttickets notifications
+mode: parallel
+max: 20
+triggers:
+  - trigger: event
+    event_type: haushalttickets_notification
+    id: notification
+  - trigger: time
+    at: "19:00:00"
+    id: due
+variables:
+  devices:
+    person.alex: notify.mobile_app_alex_phone
+    person.robin: notify.mobile_app_robin_phone
+actions:
+  - if:
+      - condition: trigger
+        id: due
+    then:
+      - action: haushalttickets.send_due_reminders
+    else:
+      - variables:
+          n: "{{ trigger.event.data }}"
+          quiet: "{{ now().strftime('%H:%M') >= '21:30' or now().strftime('%H:%M') < '07:00' }}"
+      - condition: template
+        value_template: "{{ n.person in devices }}"
+      - action: "{{ devices[n.person] }}"
+        data:
+          title: "{{ n.title }}"
+          message: "{{ n.message }}"
+          data:
+            url: /lovelace/tickets
+            group: haushalttickets
+            actions: "{{ n.actions }}"
+            push:
+              interruption-level: >-
+                {{ 'time-sensitive' if n.urgent else ('passive' if quiet else 'active') }}
+```
+
 ## Actions
 
 | Action | Purpose |
@@ -95,6 +183,7 @@ actions:
 | `haushalttickets.add_comment` | Comment on a ticket. |
 | `haushalttickets.assign` | Replace the assignees (persons linked to users). |
 | `haushalttickets.set_role` | Role of a person, or of a user without person given by name or ID (HA admins only). |
+| `haushalttickets.send_due_reminders` | One notification per person with their open tickets that are overdue, due today or due tomorrow. Returns how many were sent. |
 
 The server rules apply unchanged; a refused call raises an error with the server's
 error code.

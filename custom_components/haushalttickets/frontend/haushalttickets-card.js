@@ -15,7 +15,7 @@
  *
  * MIT-Lizenz
  */
-const HT_VERSION = "0.3.1";
+const HT_VERSION = "0.4.0";
 
 const HT_TEXTE = {
   de: {

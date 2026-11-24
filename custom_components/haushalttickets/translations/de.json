@@ -237,6 +237,10 @@
           "description": "Erwachsene geben Anschaffungen frei, Kinder dürfen nur anlegen und eigene Tickets abnehmen, der KI-Agent folgt den KI-Regeln."
         }
       }
+    },
+    "send_due_reminders": {
+      "name": "Fälligkeits-Erinnerungen senden",
+      "description": "Schickt jedem Haushaltsmitglied eine Nachricht mit seinen offenen Tickets, die überfällig, heute oder morgen fällig sind (Zuständige, ohne Zuständige die wünschende Person). Zugestellt als Ereignisse haushalttickets_notification."
     }
   }
 }
