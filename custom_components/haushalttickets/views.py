@@ -98,7 +98,7 @@ class UploadView(HomeAssistantView):
             return _error(HTTPStatus.SERVICE_UNAVAILABLE, "not_loaded", "Not loaded.")
         try:
             form = await request.post()
-        except ValueError:
+        except (ValueError, web.HTTPRequestEntityTooLarge):
             return _error(
                 HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "too_large", "Too large."
             )

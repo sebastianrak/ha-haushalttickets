@@ -103,6 +103,21 @@ async def test_server_rules_and_errors(
     )
     assert resp.status == 400
 
+    # Above Home Assistant's request limit: a JSON error the card can show
+    form = FormData()
+    form.add_field("kind", "document")
+    form.add_field(
+        "file",
+        bytes(17 * 1024 * 1024),
+        filename="big.pdf",
+        content_type="application/pdf",
+    )
+    resp = await alex.post(
+        f"/api/haushalttickets/tickets/{ticket['id']}/attachments", data=form
+    )
+    assert resp.status == 413
+    assert (await resp.json())["code"] == "too_large"
+
 
 async def test_requires_login(
     hass: HomeAssistant, loaded: MockConfigEntry, hass_client_no_auth
