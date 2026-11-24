@@ -36,6 +36,9 @@
     },
     "set_role": {
       "service": "mdi:account-key"
+    },
+    "send_due_reminders": {
+      "service": "mdi:calendar-alert"
     }
   }
 }

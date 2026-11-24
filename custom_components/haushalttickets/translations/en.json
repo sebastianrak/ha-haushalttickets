@@ -237,6 +237,10 @@
           "description": "Adults approve purchases, children may only file and accept their own tickets, the AI agent follows the AI rules."
         }
       }
+    },
+    "send_due_reminders": {
+      "name": "Send due reminders",
+      "description": "Sends each household member one notification listing their open tickets that are overdue, due today or due tomorrow (assignees, or the requester when nobody is assigned). Delivered as haushalttickets_notification events."
     }
   }
 }

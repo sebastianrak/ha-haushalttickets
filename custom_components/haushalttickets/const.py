@@ -7,6 +7,11 @@ DOMAIN: Final = "haushalttickets"
 
 # Fired on the event bus for every change on the server.
 EVENT_TICKET: Final = "haushalttickets_event"
+# One per person who should hear about a change; an automation delivers it.
+EVENT_NOTIFICATION: Final = "haushalttickets_notification"
+# Buttons in mobile app notifications ("HAUSHALTTICKETS_APPROVE_7", ...).
+EVENT_NOTIFICATION_ACTION: Final = "mobile_app_notification_action"
+ACTION_PREFIX: Final = "HAUSHALTTICKETS_"
 
 # LLM API with the ticket tools; mcp_server serves it at /api/mcp/haushalttickets.
 LLM_API_ID: Final = "haushalttickets"
@@ -42,6 +47,7 @@ SERVICE_SET_STATUS: Final = "set_status"
 SERVICE_ADD_COMMENT: Final = "add_comment"
 SERVICE_ASSIGN: Final = "assign"
 SERVICE_SET_ROLE: Final = "set_role"
+SERVICE_SEND_DUE_REMINDERS: Final = "send_due_reminders"
 
 ATTR_TYPE: Final = "type"
 ATTR_TITLE: Final = "title"

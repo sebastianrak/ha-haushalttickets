@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import ApiError, CannotConnect, HaushaltticketsClient, InvalidAuth
 from .const import AUTOMATION_USER_ID, DOMAIN, EVENT_TICKET, SCAN_INTERVAL
+from .notifications import fire, notifications_for
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -127,7 +128,10 @@ class HaushaltticketsCoordinator(DataUpdateCoordinator[TicketData]):
         return TicketData(tickets=tickets, users=users, last_seq=last_seq)
 
     async def _async_fire(self, events: list[dict[str, Any]], data: TicketData) -> None:
-        """Fire one bus event per server event, with the current ticket attached."""
+        """Fire one bus event per server event, with the current ticket attached.
+
+        Each server event also yields the notifications for the people concerned.
+        """
         known = {ticket["id"]: ticket for ticket in data.tickets}
         for event in events:
             ticket_id = event.get("ticket_id")
@@ -138,20 +142,36 @@ class HaushaltticketsCoordinator(DataUpdateCoordinator[TicketData]):
                 except ApiError:
                     ticket = None  # deleted in the meantime
                 known[ticket_id] = ticket
-            self.hass.bus.async_fire(
-                EVENT_TICKET,
-                {
-                    "seq": event["seq"],
-                    "type": event["type"],
-                    "ticket_id": ticket_id,
-                    "actor_id": event.get("actor_id"),
-                    "actor_person": data.person_of(event.get("actor_id")),
-                    "via": event["via"],
-                    "payload": event.get("payload") or {},
-                    "created_at": event.get("created_at"),
-                    "ticket": ticket_summary(ticket, data) if ticket else None,
-                },
+            bus_event = {
+                "seq": event["seq"],
+                "type": event["type"],
+                "ticket_id": ticket_id,
+                "actor_id": event.get("actor_id"),
+                "actor_person": data.person_of(event.get("actor_id")),
+                "via": event["via"],
+                "payload": event.get("payload") or {},
+                "created_at": event.get("created_at"),
+                "ticket": ticket_summary(ticket, data) if ticket else None,
+            }
+            self.hass.bus.async_fire(EVENT_TICKET, bus_event)
+            comment = (
+                await self._async_comment(event)
+                if event["type"] == "comment_added"
+                else None
             )
+            fire(
+                self.hass,
+                notifications_for(bus_event, data, self.hass.config.language, comment),
+            )
+
+    async def _async_comment(self, event: dict[str, Any]) -> str | None:
+        """Text of the comment an event refers to; None if it is gone."""
+        comment_id = (event.get("payload") or {}).get("comment_id")
+        try:
+            comments = await self.client.comments(event["ticket_id"])
+        except (ApiError, CannotConnect):
+            return None
+        return next((c["body"] for c in comments if c["id"] == comment_id), None)
 
     # Users
 

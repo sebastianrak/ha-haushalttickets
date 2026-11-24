@@ -225,6 +225,21 @@ class HaushaltticketsClient:
             json={"status": status},
         )
 
+    async def decide_approval(
+        self, acting: Acting, ticket_id: int, decision: str
+    ) -> dict[str, Any]:
+        """Approve (``approve``) or decline (``decline``) a purchase."""
+        return await self.request(
+            "POST",
+            f"/api/v1/tickets/{ticket_id}/approval",
+            acting=acting,
+            json={"decision": decision},
+        )
+
+    async def comments(self, ticket_id: int) -> list[dict[str, Any]]:
+        """Comments of a ticket, oldest first."""
+        return await self.request("GET", f"/api/v1/tickets/{ticket_id}/comments")
+
     async def add_comment(
         self, acting: Acting, ticket_id: int, body: str
     ) -> dict[str, Any]:

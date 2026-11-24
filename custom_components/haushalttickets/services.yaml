@@ -120,3 +120,5 @@ set_role:
             - adult
             - child
             - ai_agent
+
+send_due_reminders:
