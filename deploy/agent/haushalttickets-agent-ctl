@@ -21,6 +21,8 @@ CLAUDE="$STATE_DIR/.local/bin/claude"
 die() { echo "Error: $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "run as root"
 [[ -f $ENV_FILE ]] || die "$ENV_FILE not found (install-agent.sh first)"
+# Commands run as the agent user; start them in its own directory, not in /root.
+cd "$STATE_DIR"
 
 setting() { grep -Po "^$1=\K.*" "$ENV_FILE" 2>/dev/null || true; }
 
@@ -41,20 +43,46 @@ as_agent() {
     bash -c 'set -a; . "$0"; set +a; exec "$@"' "$ENV_FILE" "$@"
 }
 
+# Shapes of the secrets, so a double paste or a wrong line is caught right away.
+looks_right() {
+  case "$1" in
+    HT_AGENT_TICKETS_TOKEN) [[ $2 =~ ^[A-Za-z0-9_-]{43}$ ]] ;;
+    HT_AGENT_HA_TOKEN) [[ $2 =~ ^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$ ]] ;;
+    CLAUDE_CODE_OAUTH_TOKEN) [[ $2 =~ ^sk-ant-oat01-[A-Za-z0-9_-]+$ ]] ;;
+    *) true ;;
+  esac
+}
+
+hint() {
+  case "$1" in
+    HT_AGENT_TICKETS_TOKEN) echo "43 characters, from haushalttickets-ctl nightly-setup" ;;
+    HT_AGENT_HA_TOKEN) echo "three parts separated by dots (Home Assistant long-lived token)" ;;
+    CLAUDE_CODE_OAUTH_TOKEN) echo "starts with sk-ant-oat01- (the last line claude setup-token prints)" ;;
+  esac
+}
+
 ask() {  # ask NAME "question" [secret]
   local name=$1 question=$2 secret=${3:-} current answer
   current=$(setting "$name")
-  if [[ -n $secret ]]; then
-    local shown="none"
-    [[ -n $current ]] && shown="set, Enter keeps it"
-    read -r -s -p "$question [$shown]: " answer
-    echo
-  else
-    read -r -p "$question [${current:--}]: " answer
-  fi
-  [[ $answer == "-" ]] && answer=""
-  [[ -n $answer ]] && set_setting "$name" "$answer"
-  return 0
+  while true; do
+    if [[ -n $secret ]]; then
+      local shown="none"
+      [[ -n $current ]] && shown="set, Enter keeps it"
+      # Hidden input: paste once, then Enter.
+      read -r -s -p "$question [$shown]: " answer
+      echo
+    else
+      read -r -p "$question [${current:--}]: " answer
+    fi
+    [[ $answer == "-" ]] && answer=""
+    [[ -z $answer ]] && return 0
+    if looks_right "$name" "$answer"; then
+      set_setting "$name" "$answer"
+      [[ -n $secret ]] && echo "  taken (${#answer} characters)"
+      return 0
+    fi
+    echo "  that does not look right (${#answer} characters; expected: $(hint "$name")) - try again" >&2
+  done
 }
 
 claude_token() {

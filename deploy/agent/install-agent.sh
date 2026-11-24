@@ -100,6 +100,22 @@ echo "==> Tools"
 for tool in haushalttickets-agent-ctl haushalttickets-agent-update; do
   install -m 0755 "$SRC_DIR/deploy/agent/$tool" "/usr/local/sbin/$tool"
 done
+# `pct enter` starts a non-login shell with PATH=/sbin:/bin:/usr/sbin:/usr/bin, so the
+# tools above would only work with their full path (same as in the ticket container).
+if ! grep -q '# haushalttickets: PATH' /root/.bashrc 2>/dev/null; then
+  cat >>/root/.bashrc <<'BASHRC'
+
+# haushalttickets: PATH for the admin tools in /usr/local/sbin
+case ":$PATH:" in *:/usr/local/sbin:*) ;; *) PATH="/usr/local/sbin:/usr/local/bin:$PATH" ;; esac
+BASHRC
+fi
+# `pct enter` also passes the host's locale, which the container does not have.
+if ! grep -q "# haushalttickets: the Proxmox host's locale" /root/.bashrc 2>/dev/null; then
+  cat >>/root/.bashrc <<'BASHRC'
+# haushalttickets: the Proxmox host's locale (e.g. en_US.UTF-8) does not exist here
+export LANG=C.UTF-8
+BASHRC
+fi
 
 echo "==> systemd"
 install -m 0644 "$SRC_DIR/deploy/agent/systemd/haushalttickets-nightly.service" \

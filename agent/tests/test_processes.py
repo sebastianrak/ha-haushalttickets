@@ -40,9 +40,29 @@ def test_ha_mcp_client(tmp_path: Path) -> None:
                 "url": "https://ha.example:8123",
                 "yaml": "false",
                 "confirm": "false",
+                "cwd": str(tmp_path),
             }
             with pytest.raises(HaMcpError):
                 await ha.call("ha_fails")
+
+    asyncio.run(go())
+
+
+def test_ha_mcp_that_dies_at_start(tmp_path: Path) -> None:
+    """A server that exits at once fails cleanly (no error at asyncio shutdown)."""
+    config = Config(
+        tickets_url="http://t",
+        tickets_token="r",
+        ha_url="https://ha",
+        ha_token="h",
+        ha_mcp_command=[sys.executable, "-c", "import sys; sys.exit(1)"],
+        state_dir=tmp_path,
+    )
+
+    async def go() -> None:
+        with pytest.raises(Exception):  # noqa: B017 - whatever the SDK raises
+            async with HaMcp(config):
+                pass
 
     asyncio.run(go())
 
