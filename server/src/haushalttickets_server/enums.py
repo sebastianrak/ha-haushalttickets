@@ -139,3 +139,6 @@ class EventType(StrEnum):
     NIGHTLY_RUN_FINISHED = "nightly_run_finished"
     # Tickets wait for the nightly run, but none started for too long.
     NIGHTLY_RUN_MISSING = "nightly_run_missing"
+    # Household settings changed: categories, approval threshold, roles, visibility
+    # (payload: what). Clients reload their lists.
+    SETTINGS_CHANGED = "settings_changed"

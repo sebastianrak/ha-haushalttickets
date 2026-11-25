@@ -26,6 +26,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    true,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -95,10 +96,25 @@ class User(Base):
     ha_is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     ha_person_entity_id: Mapped[str | None] = mapped_column(String(255))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Shown as filter and for assignment on the board (set by admins).
+    board_visible: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=true()
+    )
     created_at: Mapped[datetime] = _now()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Category(Base):
+    """Free category of the household (Garden, Car, …), one per ticket."""
+
+    __tablename__ = "categories"
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True)
+    color: Mapped[str] = mapped_column(String(7))
+    created_at: Mapped[datetime] = _now()
 
 
 class Series(Base):
@@ -126,6 +142,9 @@ class Series(Base):
     assignee_ids: Mapped[list[str]] = mapped_column(JSONType, default=list)
     ha_area_id: Mapped[str | None] = mapped_column(String(255))
     ha_device_id: Mapped[str | None] = mapped_column(String(255))
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL")
+    )
     mode: Mapped[str] = mapped_column(String(20))
     interval_count: Mapped[int | None] = mapped_column(Integer)
     interval_unit: Mapped[str] = mapped_column(String(10), default=IntervalUnit.MONTHS)
@@ -175,6 +194,9 @@ class Ticket(Base):
     created_via: Mapped[str] = mapped_column(String(20), default=Via.UI)
     series_id: Mapped[int | None] = mapped_column(
         ForeignKey("series.id", ondelete="SET NULL")
+    )
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), index=True
     )
 
     # repair + home_assistant
@@ -229,6 +251,7 @@ class Ticket(Base):
     assignees: Mapped[list[User]] = relationship(
         secondary=ticket_assignees, lazy="selectin", order_by=User.display_name
     )
+    category: Mapped[Category | None] = relationship(lazy="selectin")
     checklist: Mapped[list[ChecklistItem]] = relationship(
         back_populates="ticket",
         cascade="all, delete-orphan",
@@ -240,6 +263,11 @@ class Ticket(Base):
     def assignee_ids(self) -> list[str]:
         """Ids of the assigned users."""
         return [user.ha_user_id for user in self.assignees]
+
+    @property
+    def category_name(self) -> str | None:
+        """Name of the category, for clients that do not load the list."""
+        return self.category.name if self.category else None
 
 
 class Comment(Base):

@@ -20,10 +20,18 @@ from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.util import dt as dt_util
 import probatio
 
-from .api import AUTOMATION, Acting, ApiError, CannotConnect, InvalidAuth
+from .api import (
+    AUTOMATION,
+    Acting,
+    ApiError,
+    CannotConnect,
+    InvalidAuth,
+    find_category,
+)
 from .const import (
     ATTR_AREA_ID,
     ATTR_ASSIGNEES,
+    ATTR_CATEGORY,
     ATTR_COMMENT,
     ATTR_DESCRIPTION,
     ATTR_DEVICE_ID,
@@ -65,6 +73,7 @@ CREATE_TICKET_SCHEMA = probatio.Schema(
         probatio.Optional(ATTR_DUE_DATE): cv.date,
         probatio.Optional(ATTR_ASSIGNEES): cv.entity_ids,
         probatio.Optional(ATTR_AREA_ID): cv.string,
+        probatio.Optional(ATTR_CATEGORY): cv.string,
         probatio.Optional(ATTR_DEVICE_ID): cv.string,
         probatio.Optional(ATTR_EXTRA_FIELDS): dict,
     }
@@ -104,7 +113,7 @@ SET_ROLE_SCHEMA = probatio.All(
 # Fields set through dedicated options; extra_fields must not override them.
 _RESERVED_FIELDS = frozenset(
     {"type", "title", "description", "urgency", "due_date", "assignee_ids",
-     "ha_area_id", "ha_device_id", "requested_by_id"}
+     "ha_area_id", "ha_device_id", "requested_by_id", "category_id"}
 )  # fmt: skip
 
 
@@ -222,6 +231,19 @@ async def _create_ticket(call: ServiceCall) -> ServiceResponse:
             body[field] = data[option]
     if ATTR_DUE_DATE in data:
         body["due_date"] = data[ATTR_DUE_DATE].isoformat()
+    if ATTR_CATEGORY in data:
+        categories = await call_server(coordinator, coordinator.client.categories)
+        category_id = find_category(categories, data[ATTR_CATEGORY])
+        if category_id is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_category",
+                translation_placeholders={
+                    "name": data[ATTR_CATEGORY],
+                    "known": ", ".join(c["name"] for c in categories) or "-",
+                },
+            )
+        body["category_id"] = category_id
 
     ticket = await call_server(
         coordinator, lambda: coordinator.client.create_ticket(acting, body)

@@ -37,6 +37,10 @@ create_ticket:
     area_id:
       selector:
         area:
+    category:
+      example: "Garten"
+      selector:
+        text:
     device_id:
       selector:
         device:

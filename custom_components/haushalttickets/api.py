@@ -23,6 +23,19 @@ class InvalidAuth(HaushaltticketsError):
     """Token missing, wrong or revoked."""
 
 
+def find_category(categories: list[dict[str, Any]], name: str) -> int | None:
+    """Id of the category with this name (case and spacing do not matter)."""
+    wanted = " ".join(name.split()).casefold()
+    return next(
+        (
+            c["id"]
+            for c in categories
+            if " ".join(c["name"].split()).casefold() == wanted
+        ),
+        None,
+    )
+
+
 class ApiError(HaushaltticketsError):
     """The server refused a request."""
 
@@ -180,6 +193,15 @@ class HaushaltticketsClient:
         return await self.request(
             "PATCH", f"/api/v1/users/{user_id}", acting=acting, json={"role": role}
         )
+
+    async def categories(self) -> list[dict[str, Any]]:
+        """Categories of the household (empty for servers before 0.9.0)."""
+        try:
+            return await self.request("GET", "/api/v1/categories")
+        except ApiError as err:
+            if err.status == 404:
+                return []
+            raise
 
     async def events(self, after: int, limit: int = 1000) -> dict[str, Any]:
         """Event feed after a sequence number."""

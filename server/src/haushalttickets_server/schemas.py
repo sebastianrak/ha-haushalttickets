@@ -42,6 +42,7 @@ class UserOut(_Out):
     ha_is_admin: bool
     ha_person_entity_id: str | None
     active: bool
+    board_visible: bool = True
 
 
 class UserSyncItem(_In):
@@ -57,7 +58,31 @@ class UserSync(_In):
 
 
 class UserPatch(_In):
-    role: Role
+    role: Role | None = None
+    board_visible: bool | None = None
+
+
+# Categories
+
+CategoryName = Annotated[str, Field(min_length=1, max_length=60)]
+Color = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
+
+
+class CategoryCreate(_In):
+    name: CategoryName
+    color: Color
+
+
+class CategoryPatch(_In):
+    name: CategoryName | None = None
+    color: Color | None = None
+
+
+class CategoryOut(_Out):
+    id: int
+    name: str
+    color: str
+    ticket_count: int = 0
 
 
 # Tickets
@@ -90,6 +115,7 @@ class TicketFields(_In):
     urgency: Urgency | None = None
     importance: Importance | None = None
     due_date: date | None = None
+    category_id: int | None = None
     ha_area_id: Annotated[str, Field(max_length=255)] | None = None
     ha_device_id: Annotated[str, Field(max_length=255)] | None = None
     ha_targets: list[Annotated[str, Field(max_length=255)]] | None = None
@@ -158,6 +184,8 @@ class TicketOut(_Out):
     created_via: str
     series_id: int | None
     assignee_ids: list[str]
+    category_id: int | None = None
+    category_name: str | None = None
     ha_area_id: str | None
     ha_device_id: str | None
     ha_targets: list[str]
@@ -231,6 +259,7 @@ class SeriesTemplate(_In):
     urgency: Urgency | None = None
     importance: Importance | None = None
     assignee_ids: list[str] | None = None
+    category_id: int | None = None
     ha_area_id: Annotated[str, Field(max_length=255)] | None = None
     ha_device_id: Annotated[str, Field(max_length=255)] | None = None
     checklist: Annotated[list[ChecklistText], Field(max_length=50)] | None = None
@@ -273,6 +302,7 @@ class SeriesOut(_Out):
     importance: int | None
     requested_by_id: str
     assignee_ids: list[str]
+    category_id: int | None = None
     ha_area_id: str | None
     ha_device_id: str | None
     checklist: list[str]

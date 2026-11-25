@@ -26,6 +26,8 @@ and the blog post "Unser Hausmeister ist eine KI" on kilysworld.com.
   English. See [docs/card.md](docs/card.md).
 - **Approvals:** purchases from a configurable amount need the second adult's
   approval; approving or declining moves the ticket.
+- **Settings in the card** (admins): approval limit, the household's own categories
+  with colours, and per member the role and whether they appear on the board.
 - **Recurring tickets:** every n days, weeks, months or years, counted from completion
   or on a fixed calendar, created ahead of the due date.
 - **Notifications:** the integration decides who needs to know what and fires one

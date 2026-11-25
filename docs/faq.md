@@ -35,20 +35,19 @@ users start as *child*; give adults the role *adult* with `haushalttickets.set_r
 
 ## Can I change the 250 € approval limit?
 
-Yes, but there is no button for it yet. Purchases at or above the limit need a second
-adult; an admin changes the limit through the server's API, from an address on its allow
-list:
+Yes: as an admin, open the gear in the card's header and set *Approval from (€)*.
+Purchases at or above the limit need a second adult.
 
-```bash
-curl -X PATCH http://192.168.1.20:8080/api/v1/settings \
-  -H "Authorization: Bearer <API token>" \
-  -H "X-Acting-User: <Home Assistant user ID of an admin>" \
-  -H "Content-Type: application/json" \
-  -d '{"purchase_approval_threshold": "500.00"}'
-```
+## How do I hide the AI account or a wall tablet from the board?
 
-The user ID is shown under *Settings → People → Users* when advanced mode is on in your
-profile.
+In the same settings, untick *On the board* for that member. Hidden members do not appear
+as filters or for assignment; their existing tickets stay as they are. Users without a
+person (*Settings → People*) never appear anyway.
+
+## Can I sort tickets into my own categories?
+
+Yes. Admins create categories with a name and colour in the settings; every ticket can
+have one. The board filters by category and shows it on the tiles.
 
 ## Can the AI break my Home Assistant?
 

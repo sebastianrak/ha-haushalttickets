@@ -98,6 +98,9 @@
     },
     "user_ambiguous": {
       "message": "Several Home Assistant users are named {user}; give the user ID."
+    },
+    "unknown_category": {
+      "message": "Unknown category {name}. Known: {known}"
     }
   },
   "selector": {
@@ -167,6 +170,10 @@
         "area_id": {
           "name": "Area",
           "description": "Area concerned (repairs and Home Assistant work)."
+        },
+        "category": {
+          "name": "Category",
+          "description": "Name of one of the household's categories (set up in the card's settings)."
         },
         "device_id": {
           "name": "Device",

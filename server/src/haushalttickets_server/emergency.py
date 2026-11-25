@@ -276,6 +276,7 @@ TEXTS: dict[str, dict[str, Any]] = {
         "urgency": "Dringlichkeit",
         "hearts": "Herzen",
         "due": "Fällig",
+        "category": "Kategorie",
         "due_on": "fällig {date}",
         "requested_by": "Gewünscht von",
         "assignees": "Zuständig",
@@ -407,6 +408,7 @@ TEXTS: dict[str, dict[str, Any]] = {
         "urgency": "Urgency",
         "hearts": "Hearts",
         "due": "Due",
+        "category": "Category",
         "due_on": "due {date}",
         "requested_by": "Requested by",
         "assignees": "Assignees",
@@ -996,6 +998,8 @@ def create_emergency_app(
             (t["status"], e(t["statuses"].get(ticket.status, ticket.status))),
             (t["urgency"], e(t["urgencies"].get(ticket.urgency, ticket.urgency))),
         ]
+        if ticket.category_name:
+            rows.append((t["category"], e(ticket.category_name)))
         if ticket.importance:
             rows.append((t["hearts"], "♥" * ticket.importance))
         if ticket.due_date:

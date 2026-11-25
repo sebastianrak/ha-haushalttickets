@@ -19,7 +19,8 @@ language of your Home Assistant profile; this guide uses the English labels.
 On a computer you drag tiles between columns. On a phone the board shows one column at a
 time with a tab bar; change the status inside the ticket.
 
-Filters at the top: **All**, **Mine** or one person, the kind of ticket, and a search.
+Filters at the top: **All**, **Mine** or one person, the kind of ticket, the category
+and a search.
 
 ## Create a ticket
 
@@ -27,6 +28,8 @@ Tap **New ticket** and fill in what you know – only the title is required:
 
 - **What needs doing?** – a short title.
 - **Kind** – *Repair*, *Purchase* or *Home Assistant* (work on the smart home itself).
+- **Category** – if your household uses categories (e.g. *Garden*, *Car*); shown in
+  colour on the tile.
 - **How urgent?** – *Someday*, *This week* or *Urgent*. *Urgent* notifies all adults
   right away.
 - **How important?** – hearts.
@@ -118,6 +121,12 @@ If the **nightly AI run** is set up, adults can ask it for help in a ticket:
 
 Asking for a new draft withdraws an approval, so the AI never implements something
 nobody has read.
+
+## Settings (admins)
+
+Admins see a gear in the header. It opens the household settings: from which price a
+purchase needs a second adult, the list of categories, and for every member the role
+and whether they appear on the board. Details: [card.md](card.md#settings-admins).
 
 ## Children
 

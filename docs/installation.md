@@ -103,9 +103,11 @@ restart.
 
 The integration copies all Home Assistant users to the server. Home Assistant
 administrators start as **admin**, everyone else as **child**, so nobody gets more
-rights than intended. Give every adult the role **adult**:
+rights than intended. Give every adult the role **adult** – easiest after step 4: the
+gear in the card's header opens the settings, where an admin sets each member's role
+and hides accounts that should not appear on the board (wall tablets, the AI account).
 
-*Developer tools → Actions*, choose `haushalttickets.set_role`:
+Without the card, use the action *Developer tools → Actions →* `haushalttickets.set_role`:
 
 ```yaml
 action: haushalttickets.set_role
@@ -132,7 +134,9 @@ data:
 
 3. Reload the browser or the app once.
 
-The integration delivers the card itself; you do not add a dashboard resource.
+The integration delivers the card itself; you do not add a dashboard resource. As an
+admin, open the gear to set roles (step 3), the approval limit and categories such as
+*Garden* or *Car*.
 Options and features: [card.md](card.md). How to use the board:
 [user-guide.md](user-guide.md).
 
