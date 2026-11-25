@@ -17,6 +17,15 @@ jobs:
       - run: uvx ruff check .
       - run: uvx ruff format --check .
 
+  release-notes:
+    # A version that is not released yet needs release-notes/v<version>.md;
+    # the Release workflow publishes it once this reaches main.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck .github/scripts/release-info.sh
+      - run: .github/scripts/release-info.sh check
+
   server:
     runs-on: ubuntu-latest
     services:
