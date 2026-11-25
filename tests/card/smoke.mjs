@@ -27,7 +27,7 @@ const ticket = (id, extra = {}) => ({
   updated_at: now, closed_at: null, comment_count: 0, attachment_count: 0, cover_attachment_id: null, ...extra,
 });
 const open = [
-  ticket(1, { urgency: "burning", assignee_ids: ["u-robin"], cover_attachment_id: "a1", attachment_count: 1, series_id: 5 }),
+  ticket(1, { urgency: "burning", assignee_ids: ["u-robin"], cover_attachment_id: "a1", attachment_count: 1, series_id: 5, category_id: 1, category_name: "Garten" }),
   ticket(2, { status: "waiting_for_parts", type: "purchase", approval_state: "pending", price_estimated: "899.00" }),
   ticket(3, { status: "acceptance", type: "home_assistant", comment_count: 2 }),
 ];
@@ -45,6 +45,7 @@ const hass = {
   states: {
     "person.alex": { entity_id: "person.alex", attributes: { friendly_name: "Alex Muster", user_id: "u-alex" } },
     "person.robin": { entity_id: "person.robin", attributes: { friendly_name: "Robin Muster", user_id: "u-robin" } },
+    "person.kind": { entity_id: "person.kind", attributes: { friendly_name: "Kim Muster", user_id: "u-kind" } },
   },
   areas: { kueche: { area_id: "kueche", name: "Küche" } },
   connection: {
@@ -54,6 +55,7 @@ const hass = {
       if (path === "/api/v1/users") return [
         { ha_user_id: "u-alex", display_name: "Alex Muster", role: "admin", ha_is_admin: true, ha_person_entity_id: "person.alex", active: true },
         { ha_user_id: "u-robin", display_name: "Robin Muster", role: "adult", ha_is_admin: false, ha_person_entity_id: "person.robin", active: true },
+        { ha_user_id: "u-kind", display_name: "Kim Muster", role: "child", ha_is_admin: false, ha_person_entity_id: "person.kind", active: true, board_visible: false },
         { ha_user_id: "automation", display_name: "Automation", role: "adult", ha_is_admin: false, ha_person_entity_id: null, active: true },
       ];
       if (path === "/api/v1/tickets" && method === "GET") {
@@ -76,6 +78,11 @@ const hass = {
       if (/\/api\/v1\/tickets\/3\/(comments|history|attachments)/.test(path)) return [];
       if (method === "POST" && path === "/api/v1/tickets") return ticket(99, msg.body);
       if (path === "/api/v1/series" && method === "GET") return serien;
+      if (path === "/api/v1/categories" && method === "GET") return [
+        { id: 2, name: "Auto", color: "#2196f3", ticket_count: 0 },
+        { id: 1, name: "Garten", color: "#4caf50", ticket_count: 1 },
+      ];
+      if (path === "/api/v1/settings") return { purchase_approval_threshold: (msg.body || {}).purchase_approval_threshold || "250.00" };
       if (path === "/api/v1/series" && method === "POST") return { id: 9, appears_on: "2099-01-01", ...msg.body };
       return {};
     },
@@ -110,7 +117,15 @@ const archiv = root.querySelector('.spalte[data-s="done"] .mehr');
 assert.equal(archiv, null); // 4 done tickets ≤ 6
 assert.ok(root.querySelector('img.cover[data-bild="a1"]'));
 assert.equal(root.querySelector(".kopf .zahl").textContent, "3");
-assert.equal(root.querySelectorAll(".chip[data-f]").length, 4); // Alle, Meine, Alex, Robin
+assert.equal(root.querySelectorAll(".chip[data-f]").length, 4); // Alle, Meine, Alex, Robin – Kim ist ausgeblendet
+
+// Kategorien: Chip auf der Kachel, Filter im Kopf
+assert.equal(root.querySelector('.karte[data-id="1"] .kat').textContent, "Garten");
+const katfilter = root.querySelector(".katfilter");
+same([...katfilter.options].map((o) => o.textContent), ["Alle Kategorien", "Auto", "Garten"]);
+katfilter.value = "1"; katfilter.dispatchEvent(new window.Event("change"));
+assert.equal(root.querySelectorAll(".karte").length, 1);
+katfilter.value = "alle"; katfilter.dispatchEvent(new window.Event("change"));
 
 // Typ-Filter
 root.querySelector('.chip[data-y="purchase"]').click();
@@ -135,11 +150,14 @@ portal.querySelector(".dtitel").value = "Waschmaschine neu";
 portal.querySelector('input[data-feld="price_estimated"]').value = "899";
 portal.querySelector('input[data-feld="vendor"]').value = "Fachhandel";
 portal.querySelector('.st button[data-v="acceptance"]').click();
+const dkat = portal.querySelector(".dkat");
+assert.ok(dkat, "category field");
+dkat.value = "2";
 sent.length = 0;
 portal.querySelector(".ok").click();
 await tick(); await tick();
 const patch = sent.find((m) => m.method === "PATCH");
-same(patch.body, { title: "Waschmaschine neu", vendor: "Fachhandel" });
+same(patch.body, { title: "Waschmaschine neu", vendor: "Fachhandel", category_id: 2 });
 const status = sent.find((m) => m.path.endsWith("/status"));
 same(status.body, { status: "acceptance" });
 assert.ok(!sent.some((m) => m.path.endsWith("/assignees")), "assignees unchanged");
@@ -317,5 +335,55 @@ ku = p6.querySelector(".ku");
 assert.equal(ku.disabled, true);
 assert.match(p6.querySelector(".kiflags").textContent, /Ein neuer Entwurf ist angefragt/);
 card._zu_();
+
+// Einstellungen (Admin): Freigabegrenze, Kategorien, Mitglieder
+root.querySelector(".zahnrad").click();
+await tick(); await tick();
+const pe = window.document.querySelector(".haushalttickets-dialog").shadowRoot;
+const einst = pe.querySelector(".dlg.einst");
+assert.ok(einst, "settings open");
+assert.equal(einst.querySelector(".grenze").value, "250.00");
+assert.equal(einst.querySelectorAll(".ezeile[data-k]").length, 2);
+const mit = [...einst.querySelectorAll(".mit")];
+same(mit.map((m) => m.dataset.u), ["u-alex", "u-kind", "u-robin"]); // nie „Automation“
+assert.equal(einst.querySelector('.mit[data-u="u-alex"] .mrolle').disabled, true); // eigene Rolle
+assert.equal(einst.querySelector('.mit[data-u="u-kind"] .msicht').checked, false);
+const warte = async () => { await tick(); await tick(); await tick(); };
+const ein = () => window.document.querySelector(".haushalttickets-dialog").shadowRoot.querySelector(".dlg.einst");
+
+sent.length = 0;
+const grenze = ein().querySelector(".grenze");
+grenze.value = "300"; grenze.dispatchEvent(new window.Event("change"));
+await warte();
+same(sent.find((m) => m.path === "/api/v1/settings" && m.method === "PATCH").body, { purchase_approval_threshold: "300.00" });
+
+sent.length = 0;
+ein().querySelector(".kneu-name").value = "Küche";
+ein().querySelector(".kneu").click();
+await warte();
+const post = sent.find((m) => m.path === "/api/v1/categories" && m.method === "POST");
+assert.equal(post.body.name, "Küche");
+assert.match(post.body.color, /^#[0-9a-f]{6}$/);
+
+sent.length = 0;
+let weg = ein().querySelector('.ezeile[data-k="2"] .kweg');
+weg.click();
+assert.match(weg.textContent, /0 Ticket/);
+weg.click();
+await warte();
+assert.ok(sent.some((m) => m.method === "DELETE" && m.path === "/api/v1/categories/2"), "category deleted");
+
+sent.length = 0;
+const sicht = ein().querySelector('.mit[data-u="u-kind"] .msicht');
+sicht.checked = true; sicht.dispatchEvent(new window.Event("change"));
+await warte();
+same(sent.find((m) => m.path === "/api/v1/users/u-kind").body, { board_visible: true });
+sent.length = 0;
+const rolle = ein().querySelector('.mit[data-u="u-robin"] .mrolle');
+rolle.value = "child"; rolle.dispatchEvent(new window.Event("change"));
+await warte();
+same(sent.find((m) => m.path === "/api/v1/users/u-robin").body, { role: "child" });
+ein().querySelector(".zu").click();
+assert.equal(window.document.querySelector(".haushalttickets-dialog"), null);
 
 console.log("card smoke test ok");

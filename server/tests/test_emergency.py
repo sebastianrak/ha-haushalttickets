@@ -181,9 +181,17 @@ def test_login_and_actions(app: FastAPI, eapp: FastAPI) -> None:
 
 def test_permissions_still_apply(app: FastAPI, eapp: FastAPI, api: Api) -> None:
     """A purchase awaiting approval cannot be moved on in the emergency UI either."""
+    category = api("alex").post(
+        "/api/v1/categories", json={"name": "Wohnzimmer", "color": "#795548"}
+    )
     response = api("robin").post(
         "/api/v1/tickets",
-        json={"type": "purchase", "title": "Sofa", "price_estimated": "900"},
+        json={
+            "type": "purchase",
+            "title": "Sofa",
+            "price_estimated": "900",
+            "category_id": category.json()["id"],
+        },
     )
     number = response.json()["id"]
     _set_password(app)
@@ -191,6 +199,7 @@ def test_permissions_still_apply(app: FastAPI, eapp: FastAPI, api: Api) -> None:
     csrf = _login(client)
     page = client.get(f"/t/{number}").text
     assert "Freigabe ausstehend" in page
+    assert "Wohnzimmer" in page
     response = client.post(
         f"/t/{number}/status", data={"csrf": csrf, "status": "in_progress"}
     )

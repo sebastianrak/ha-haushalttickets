@@ -32,10 +32,12 @@ from .models import (
     AIDraft,
     ApiToken,
     Attachment,
+    Category,
     ChecklistItem,
     Comment,
     Event,
     HistoryEntry,
+    Series,
     Setting,
     Ticket,
     User,
@@ -43,8 +45,11 @@ from .models import (
 from .permissions import Actor
 from .schemas import (
     TYPE_FIELDS,
+    CategoryCreate,
+    CategoryPatch,
     TicketCreate,
     TicketFields,
+    UserPatch,
     UserSyncItem,
 )
 
@@ -133,8 +138,11 @@ def set_approval_threshold(session: Session, actor: Actor, value: Decimal) -> No
     setting = session.get(Setting, SETTING_APPROVAL_THRESHOLD)
     if setting is None:
         session.add(Setting(key=SETTING_APPROVAL_THRESHOLD, value=str(value)))
+    elif Decimal(setting.value) == value:
+        return
     else:
         setting.value = str(value)
+    emit(session, actor, EventType.SETTINGS_CHANGED, None, {"what": "approval"})
 
 
 # Users
@@ -181,7 +189,119 @@ def set_role(session: Session, actor: Actor, user: User, role: Role) -> None:
         raise Invalid("reserved_user", "The role of the user Automation is fixed.")
     if user.ha_user_id == actor.user_id and role != Role.ADMIN:
         raise Invalid("own_admin_role", "Admins cannot remove their own admin role.")
-    user.role = role
+    if user.role != role:
+        user.role = role
+        emit(session, actor, EventType.SETTINGS_CHANGED, None, {"what": "users"})
+
+
+def update_user(session: Session, actor: Actor, user: User, patch: UserPatch) -> None:
+    """Role and board visibility of a user (admins)."""
+    perm.check_admin(actor)
+    sent = patch.model_fields_set
+    if "role" in sent and patch.role is not None:
+        set_role(session, actor, user, patch.role)
+    if "board_visible" in sent and patch.board_visible is not None:
+        if user.ha_user_id == AUTOMATION_USER_ID:
+            raise Invalid("reserved_user", "The user Automation is never shown.")
+        if user.board_visible != patch.board_visible:
+            user.board_visible = patch.board_visible
+            emit(session, actor, EventType.SETTINGS_CHANGED, None, {"what": "users"})
+
+
+# Categories
+
+
+def list_categories(session: Session) -> list[tuple[Category, int]]:
+    """All categories by name, each with the number of tickets that use it."""
+    counts = dict(
+        session.execute(
+            select(Ticket.category_id, func.count())
+            .where(Ticket.category_id.is_not(None))
+            .group_by(Ticket.category_id)
+        ).all()
+    )
+    categories = session.scalars(select(Category).order_by(func.lower(Category.name)))
+    return [(category, counts.get(category.id, 0)) for category in categories]
+
+
+def get_category(session: Session, category_id: int) -> Category:
+    """Category by id."""
+    category = session.get(Category, category_id)
+    if category is None:
+        raise NotFound(f"Category {category_id} not found")
+    return category
+
+
+def check_category(session: Session, category_id: int | None) -> None:
+    """A category a ticket or series may refer to (None clears it)."""
+    if category_id is not None and session.get(Category, category_id) is None:
+        raise Invalid("unknown_category", f"Unknown category {category_id}.")
+
+
+def _category_name(session: Session, name: str, own_id: int | None = None) -> str:
+    name = " ".join(name.split())
+    if not name:
+        raise Invalid("name_required", "A category needs a name.")
+    taken = session.scalar(
+        select(Category.id).where(
+            func.lower(Category.name) == name.lower(), Category.id != (own_id or -1)
+        )
+    )
+    if taken is not None:
+        raise Invalid("category_exists", f"There is already a category {name!r}.")
+    return name
+
+
+def create_category(session: Session, actor: Actor, data: CategoryCreate) -> Category:
+    """New category (admins)."""
+    perm.check_admin(actor)
+    category = Category(
+        name=_category_name(session, data.name), color=data.color.lower()
+    )
+    session.add(category)
+    session.flush()
+    emit(session, actor, EventType.SETTINGS_CHANGED, None, {"what": "categories"})
+    return category
+
+
+def update_category(
+    session: Session, actor: Actor, category: Category, patch: CategoryPatch
+) -> Category:
+    """Rename or recolor a category (admins); tickets keep it."""
+    perm.check_admin(actor)
+    sent = patch.model_fields_set
+    if "name" in sent and patch.name is not None:
+        category.name = _category_name(session, patch.name, category.id)
+    if "color" in sent and patch.color is not None:
+        category.color = patch.color.lower()
+    emit(session, actor, EventType.SETTINGS_CHANGED, None, {"what": "categories"})
+    return category
+
+
+def delete_category(session: Session, actor: Actor, category: Category) -> int:
+    """Remove a category (admins). Its tickets lose it; returns how many."""
+    perm.check_admin(actor)
+    tickets = session.scalars(
+        select(Ticket).where(Ticket.category_id == category.id)
+    ).all()
+    for ticket in tickets:
+        record(session, actor, ticket, "category", category.name, None)
+        ticket.category = None
+        ticket.updated_at = _now()
+        emit(
+            session,
+            actor,
+            EventType.TICKET_UPDATED,
+            ticket.id,
+            {"fields": ["category_id"]},
+        )
+    for series in session.scalars(
+        select(Series).where(Series.category_id == category.id)
+    ):
+        series.category_id = None
+    session.delete(category)
+    emit(session, actor, EventType.SETTINGS_CHANGED, None, {"what": "categories"})
+    return len(tickets)
 
 
 # Tickets
@@ -308,6 +428,8 @@ def create_ticket(session: Session, actor: Actor, data: TicketCreate) -> Ticket:
     requester = get_user_or_invalid(session, data.requested_by_id or actor.user_id)
     if "related_purchase_id" in sent:
         _check_related_purchase(session, data.related_purchase_id)
+    if "category_id" in sent:
+        check_category(session, data.category_id)
 
     ticket = Ticket(
         type=data.type,
@@ -365,6 +487,8 @@ def update_ticket(
         raise Invalid("title_required", "A ticket needs a title.")
     if "related_purchase_id" in sent:
         _check_related_purchase(session, patch.related_purchase_id)
+    if "category_id" in sent:
+        check_category(session, patch.category_id)
     if "description" in sent and patch.description is None:
         patch.description = ""
     if "urgency" in sent and patch.urgency is None:
@@ -375,8 +499,21 @@ def update_ticket(
         new = _clean(field, getattr(patch, field))
         old = getattr(ticket, field)
         if old != new:
-            record(session, actor, ticket, field, old, new)
-            setattr(ticket, field, new)
+            if field == "category_id":
+                # Names, so the history stays readable after a rename or delete.
+                category = session.get(Category, new) if new is not None else None
+                record(
+                    session,
+                    actor,
+                    ticket,
+                    "category",
+                    ticket.category_name,
+                    category.name if category else None,
+                )
+                ticket.category = category
+            else:
+                record(session, actor, ticket, field, old, new)
+                setattr(ticket, field, new)
             changed[field] = new
     if changed:
         ticket.updated_at = _now()

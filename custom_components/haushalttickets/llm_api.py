@@ -17,7 +17,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import llm
 import probatio
 
-from .api import Acting, ApiError, CannotConnect, InvalidAuth
+from .api import Acting, ApiError, CannotConnect, InvalidAuth, find_category
 from .const import DOMAIN, LLM_API_ID, LLM_API_NAME, STATUSES, TICKET_TYPES, URGENCIES
 from .coordinator import HaushaltticketsCoordinator
 
@@ -140,6 +140,8 @@ def _summary(ticket: dict[str, Any], names: _Names) -> dict[str, Any]:
         "assignees": [names(user_id) for user_id in ticket["assignee_ids"]],
         "updated_at": ticket["updated_at"],
     }
+    if ticket.get("category_name"):
+        summary["category"] = ticket["category_name"]
     if ticket["type"] == "purchase":
         summary["approval_state"] = ticket["approval_state"]
     if ticket["ai_draft_requested"] or ticket["ai_implement_approved"]:
@@ -162,8 +164,12 @@ def _details(ticket: dict[str, Any], names: _Names) -> dict[str, Any]:
             "ai_implement_approved_by_id",
             "checklist",
             "series_id",
+            "category_id",
+            "category_name",
         }
     }
+    if ticket.get("category_name"):
+        details["category"] = ticket["category_name"]
     details["requested_by"] = names(ticket["requested_by_id"])
     details["created_by"] = names(ticket["created_by_id"])
     details["assignees"] = [names(user_id) for user_id in ticket["assignee_ids"]]
@@ -182,14 +188,15 @@ class HouseholdTool(_TicketTool):
     title = "Household and ticket rules"
     description = (
         "Return the calling person, the household members with their roles, the "
-        "allowed ticket types, statuses and urgencies, and the purchase approval "
-        "threshold. Call this first if you need names or allowed values."
+        "allowed ticket types, statuses, urgencies and categories, and the purchase "
+        "approval threshold. Call this first if you need names or allowed values."
     )
     parameters = probatio.Schema({})
     annotations = _READ
 
     async def _async_run(self, acting: Acting, args: dict[str, Any]) -> dict[str, Any]:
         settings = await self._request(acting, "GET", "/api/v1/settings")
+        categories = await self._coordinator.client.categories()
         users = self._coordinator.data.users
         me = users.get(acting.user_id, {})
         return {
@@ -203,6 +210,7 @@ class HouseholdTool(_TicketTool):
             "statuses": list(STATUSES),
             "statuses_you_may_set": list(AI_STATUSES),
             "urgencies": list(URGENCIES),
+            "categories": [category["name"] for category in categories],
             "importance": "1 to 5 hearts",
             "purchase_approval_threshold_eur": settings["purchase_approval_threshold"],
         }
@@ -350,6 +358,10 @@ class CreateTicketTool(_TicketTool):
             ),
             probatio.Optional("due_date", description="Due date, YYYY-MM-DD."): _DATE,
             probatio.Optional(
+                "category",
+                description="One of the household's categories (see household).",
+            ): probatio.All(str, probatio.Length(min=1, max=60)),
+            probatio.Optional(
                 "price_estimated", description="Purchases: estimated price in EUR."
             ): _AMOUNT,
             probatio.Optional(
@@ -369,7 +381,19 @@ class CreateTicketTool(_TicketTool):
         body = {
             key: f"{value:.2f}" if key.endswith("_estimated") else value
             for key, value in args.items()
+            if key != "category"
         }
+        if "category" in args:
+            categories = await self._coordinator.client.categories()
+            category_id = find_category(categories, args["category"])
+            if category_id is None:
+                known = ", ".join(c["name"] for c in categories) or "none"
+                raise ApiError(
+                    422,
+                    "unknown_category",
+                    f"Unknown category {args['category']!r}. Known: {known}.",
+                )
+            body["category_id"] = category_id
         ticket = await self._request(acting, "POST", "/api/v1/tickets", json=body)
         await self._coordinator.async_request_refresh()
         return {"created": _summary(ticket, self._names)}

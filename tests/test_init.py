@@ -21,6 +21,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.haushalttickets.api import Acting
 from custom_components.haushalttickets.const import DOMAIN, EVENT_TICKET
 from custom_components.haushalttickets.coordinator import HaushaltticketsCoordinator
 from custom_components.haushalttickets.diagnostics import (
@@ -363,3 +364,28 @@ async def test_set_role(
             blocking=True,
         )
     assert err.value.translation_placeholders["code"] == "admin_required"
+
+
+async def test_categories(
+    hass: HomeAssistant, loaded: MockConfigEntry, household: Household
+) -> None:
+    """create_ticket takes a category by name; events carry its name."""
+    client = loaded.runtime_data.client
+    await client.request(
+        "POST",
+        "/api/v1/categories",
+        acting=Acting(household.alex.id, "ui"),
+        json={"name": "Garten", "color": "#4caf50"},
+    )
+    events = async_capture_events(hass, EVENT_TICKET)
+    result = await _create(hass, household.alex.id, category=" garten ")
+    assert result["category"] == "Garten"
+    await loaded.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    created = [e for e in events if e.data["type"] == "ticket_created"]
+    assert created[-1].data["ticket"]["category"] == "Garten"
+
+    with pytest.raises(ServiceValidationError) as err:
+        await _create(hass, household.alex.id, category="Auto")
+    assert err.value.translation_key == "unknown_category"
+    assert err.value.translation_placeholders["known"] == "Garten"

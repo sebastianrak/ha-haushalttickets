@@ -270,6 +270,7 @@ def ticket_summary(ticket: dict[str, Any], data: TicketData) -> dict[str, Any]:
         "due_date": ticket.get("due_date"),
         "approval_state": ticket.get("approval_state"),
         "series_id": ticket.get("series_id"),
+        "category": ticket.get("category_name"),
         "requested_by_id": ticket["requested_by_id"],
         "requested_by_person": data.person_of(ticket["requested_by_id"]),
         "assignee_ids": ticket["assignee_ids"],

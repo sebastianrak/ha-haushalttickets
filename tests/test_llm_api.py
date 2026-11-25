@@ -13,6 +13,7 @@ from homeassistant.setup import async_setup_component
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.haushalttickets.api import Acting
 from custom_components.haushalttickets.const import DOMAIN, LLM_API_ID
 
 from .conftest import Household
@@ -300,3 +301,39 @@ async def test_ai_account_follows_ai_rules(
     )
     assert not error, created
     assert created["created"]["requested_by"] == "KI-Hausmeister"
+
+
+async def test_categories_through_mcp(
+    hass: HomeAssistant,
+    mcp: None,
+    loaded: MockConfigEntry,
+    household: Household,
+    hass_client,
+) -> None:
+    """The household lists the categories; a new ticket takes one by name."""
+    await loaded.runtime_data.client.request(
+        "POST",
+        "/api/v1/categories",
+        acting=Acting(household.alex.id, "ui"),
+        json={"name": "Garten", "color": "#4caf50"},
+    )
+    client = await _client(hass, hass_client, household.alex)
+    error, info = await client.call("haushalttickets_household")
+    assert not error
+    assert info["categories"] == ["Garten"]
+    error, created = await client.call(
+        "haushalttickets_create_ticket", type="repair", title="Zaun", category="GARTEN"
+    )
+    assert not error, created
+    assert created["created"]["category"] == "Garten"
+    error, details = await client.call(
+        "haushalttickets_get_ticket", ticket_id=created["created"]["id"]
+    )
+    assert details["ticket"]["category"] == "Garten"
+    assert "category_id" not in details["ticket"]
+    error, refused = await client.call(
+        "haushalttickets_create_ticket", type="repair", title="Reifen", category="Auto"
+    )
+    assert error
+    assert refused["error"] == "unknown_category"
+    assert "Garten" in refused["message"]

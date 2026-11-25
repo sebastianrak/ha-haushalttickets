@@ -17,8 +17,10 @@ Use it in a panel view or a full-width section.
   "Wartet auf Teile" is a marker on tickets in "In Arbeit". A purchase that needs
   approval moves to "Wird beredet" by itself and, once decided, to "Offen" or
   "Träum weiter".
-- Filters: everyone / mine / per person, ticket type, text search.
-- Tiles: type icon, number, title, assignees, urgency, waiting marker, purchase
+- Filters: everyone / mine / per person, ticket type, category, text search. People
+  hidden in the settings do not appear as filters or for assignment; tickets already
+  assigned to them keep showing their avatar.
+- Tiles: type icon, number, title, assignees, category in its colour, urgency, waiting marker, purchase
   approval, due date, hearts, comment and attachment counts, the requester in
   "Abnahme", and the first photo as preview.
 - Desktop: drag tiles between columns. Phones (under 600 px): one column at a time
@@ -26,7 +28,7 @@ Use it in a panel view or a full-width section.
 
 ## Ticket dialog
 
-Title, description, status, urgency, assignees (adults), due date, hearts, area,
+Title, description, category, status, urgency, assignees (adults), due date, hearts, area,
 type-specific details (prices, vendor, link, warranty; contractor, appointment,
 costs, warranty case and related purchase; affected entities), approval buttons
 for the second adult, AI approvals (adults), checklist, photos and files (camera
@@ -44,6 +46,22 @@ uploads up to 16 MiB.
 - **Wiederkehrend** in the header lists every series with its rhythm, the open round or
   the next due date, and lets you change, pause or end it.
 - Tiles of rounds carry a repeat icon. Children manage their own series only.
+
+A new ticket takes the category selected in the filter.
+
+## Settings (admins)
+
+The gear in the header opens the household settings. Changes apply right away and
+reach every open board.
+
+- **Approval from (€)** – purchases from this estimated price need a second adult
+  (default 250 €).
+- **Categories** – add, rename and recolour; the number shows how many tickets use one.
+  Deleting asks a second time and clears the category on its tickets (recorded in their
+  history) and series.
+- **Members** – every Home Assistant user: role (admin, adult, child, AI) and whether
+  they appear on the board. Users without a person never appear; your own role is fixed
+  so the household always keeps an admin.
 
 ## Opening a ticket from a link
 

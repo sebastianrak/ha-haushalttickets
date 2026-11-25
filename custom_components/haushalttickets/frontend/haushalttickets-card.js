@@ -16,7 +16,7 @@
  *
  * MIT-Lizenz
  */
-const HT_VERSION = "0.6.0";
+const HT_VERSION = "0.9.0";
 
 const HT_TEXTE = {
   de: {
@@ -54,6 +54,13 @@ const HT_TEXTE = {
     pausieren: "Pausieren", fortsetzen: "Fortsetzen", beenden: "Beenden", beendenFrage: "Wirklich beenden?",
     aendern: "Ändern", abbrechen: "Abbrechen", naechsteRunde: "Nächste Runde fällig", geplant: "Geplant – erscheint am %d",
     keineSerien: "Noch nichts Wiederkehrendes. Im Ticket „Wiederholen“ anhaken.",
+    einstellungen: "Einstellungen", freigabeAb: "Freigabe nötig ab (€)",
+    freigabeText: "Anschaffungen ab diesem Betrag braucht die Zustimmung einer zweiten erwachsenen Person.",
+    kategorie: "Kategorie", kategorien: "Kategorien", keineKategorie: "Keine", alleKategorien: "Alle Kategorien",
+    neueKategorie: "Neue Kategorie …", hinzufuegen: "Hinzufügen", katLoeschen: "Löschen? %n Ticket(s) verlieren sie.",
+    keineKategorien: "Noch keine Kategorien.", mitgliederT: "Mitglieder", aufBoard: "Auf dem Board",
+    ohnePerson: "ohne Person – nicht auf dem Board", gespeichert: "Gespeichert",
+    rollen: { admin: "Admin", adult: "Erwachsen", child: "Kind", ai_agent: "KI" },
     felder: {
       title: "Titel", description: "Beschreibung", urgency: "Dringlichkeit", importance: "Herzen", due_date: "Fälligkeit",
       ha_area_id: "Bereich", ha_device_id: "Gerät", ha_targets: "Entitäten", price_estimated: "Preis geschätzt",
@@ -65,10 +72,15 @@ const HT_TEXTE = {
       checklist_done: "Checkliste ✓", attachment_added: "Anhang +", attachment_removed: "Anhang −",
       ai_draft_requested: "KI-Entwurf", ai_implement_approved: "KI-Umsetzung", admin_override: "Admin-Abnahme",
       ai_draft: "KI-Entwurf (Version)", ai_change: "KI-Änderung",
-      series_id: "Wiederholung",
+      series_id: "Wiederholung", category: "Kategorie",
     },
     fehler: {
       ai_series_forbidden: "Wiederkehrende Tickets legt die KI nicht an.",
+      category_exists: "Diese Kategorie gibt es schon.",
+      name_required: "Der Name fehlt.",
+      unknown_category: "Diese Kategorie gibt es nicht mehr.",
+      own_admin_role: "Die eigene Admin-Rolle kann man nicht abgeben.",
+      admin_required: "Das dürfen nur Admins.",
       no_draft: "Umsetzen geht erst, wenn ein Entwurf da ist.",
       draft_pending: "Ein neuer Entwurf ist angefragt; erst danach freigeben.",
       series_forbidden: "Kinder verwalten nur ihre eigenen wiederkehrenden Tickets.",
@@ -125,6 +137,13 @@ const HT_TEXTE = {
     pausieren: "Pause", fortsetzen: "Resume", beenden: "End", beendenFrage: "Really end?",
     aendern: "Edit", abbrechen: "Cancel", naechsteRunde: "Next round due", geplant: "Planned – appears on %d",
     keineSerien: "Nothing recurring yet. Tick “Repeat” in a ticket.",
+    einstellungen: "Settings", freigabeAb: "Approval needed from (€)",
+    freigabeText: "Purchases from this amount need the consent of a second adult.",
+    kategorie: "Category", kategorien: "Categories", keineKategorie: "None", alleKategorien: "All categories",
+    neueKategorie: "New category …", hinzufuegen: "Add", katLoeschen: "Delete? %n ticket(s) lose it.",
+    keineKategorien: "No categories yet.", mitgliederT: "Members", aufBoard: "On the board",
+    ohnePerson: "no person – not on the board", gespeichert: "Saved",
+    rollen: { admin: "Admin", adult: "Adult", child: "Child", ai_agent: "AI" },
     felder: {
       title: "Title", description: "Description", urgency: "Urgency", importance: "Hearts", due_date: "Due date",
       ha_area_id: "Area", ha_device_id: "Device", ha_targets: "Entities", price_estimated: "Estimated price",
@@ -136,7 +155,7 @@ const HT_TEXTE = {
       checklist_done: "Checklist ✓", attachment_added: "Attachment +", attachment_removed: "Attachment −",
       ai_draft_requested: "AI draft", ai_implement_approved: "AI implementation", admin_override: "Admin acceptance",
       ai_draft: "AI draft (version)", ai_change: "AI change",
-      series_id: "Repeat",
+      series_id: "Repeat", category: "Category",
     },
     fehler: {},
   },
@@ -159,6 +178,9 @@ const HT_DRINGLICH_RANG = { burning: 0, this_week: 1, someday: 2 };
 const HT_TYPEN = { repair: "mdi:wrench-outline", purchase: "mdi:cart-outline", home_assistant: "mdi:home-assistant" };
 const HT_GESCHLOSSEN = ["done", "rejected"];
 const HT_ERWACHSEN = ["admin", "adult"];
+const HT_ROLLEN = ["admin", "adult", "child", "ai_agent"];
+// Farben für neue Kategorien (gut lesbar in hell und dunkel)
+const HT_KAT_FARBEN = ["#4caf50", "#2196f3", "#ff9800", "#9c27b0", "#f44336", "#009688", "#795548", "#607d8b", "#e91e63", "#cddc39"];
 // Felder je Typ, wie auf dem Server (schemas.TYPE_FIELDS)
 const HT_TYPFELDER = {
   repair: ["ha_area_id", "contractor_name", "contractor_phone", "contractor_appointment", "cost_estimated", "cost_actual", "warranty_case", "related_purchase_id"],
@@ -207,6 +229,8 @@ class HaushaltticketsCard extends HTMLElement {
     this._users = this._users || {};
     this._filter = this._filter || "alle";
     this._typ = this._typ || "alle";
+    this._kat = this._kat || "alle";
+    this._kategorien = this._kategorien || [];
     this._suche = this._suche || "";
     this._archivAuf = this._archivAuf || {};
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
@@ -250,20 +274,25 @@ class HaushaltticketsCard extends HTMLElement {
     if (this._laedt) { this._nochmal = true; return; }
     this._laedt = true;
     try {
-      const [users, offen, zu, serien] = await Promise.all([
+      const [users, offen, zu, serien, kategorien] = await Promise.all([
         this._ws("GET", "/api/v1/users"),
         this._ws("GET", "/api/v1/tickets", { params: { include_closed: false, limit: 500 } }),
         this._ws("GET", "/api/v1/tickets", { params: { status: HT_GESCHLOSSEN, limit: 200 } }),
         this._ws("GET", "/api/v1/series").catch(() => []),   // Server vor 0.6.0 kennt keine Serien
+        this._ws("GET", "/api/v1/categories").catch(() => []),   // Server vor 0.9.0 kennt keine Kategorien
       ]);
       this._serien = Array.isArray(serien) ? serien : [];
-      const vorher = Object.keys(this._users).length;
+      this._kategorien = Array.isArray(kategorien) ? kategorien : [];
       this._users = Object.fromEntries(users.map((u) => [u.ha_user_id, u]));
       this._offen = offen.tickets;
       this._zu = zu.tickets;
       this._zuAnzahl = zu.count;
       this._geladen = true;
-      if (!vorher) this._kopf(); else this._board();
+      if (this._kat !== "alle" && !this._kategorien.some((k) => String(k.id) === this._kat)) this._kat = "alle";
+      // Kopf nur neu zeichnen, wenn sich Mitglieder, Rolle oder Kategorien geändert haben
+      const sig = JSON.stringify([this._mitglieder().map((u) => u.ha_user_id), this._rolle(), this._kategorien.map((k) => [k.id, k.name, k.color])]);
+      if (sig !== this._kopfSig) { this._kopfSig = sig; this._kopf(); } else this._board();
+      if (this._einstAuf) this._einstellungenZeichnen();
       if (this._spaeter) { const id = this._spaeter; this._spaeter = null; this._oeffnen(id); }
       if (this._serienAuf) this._serienZeichnen();
     } catch (e) {
@@ -303,7 +332,7 @@ class HaushaltticketsCard extends HTMLElement {
   // Haushaltsmitglieder: mit Person verknüpft oder KI-Konto; nie der Benutzer „Automation“
   _mitglieder() {
     return Object.values(this._users)
-      .filter((u) => u.active && u.ha_user_id !== "automation" && (u.ha_person_entity_id || u.role === "ai_agent"))
+      .filter((u) => u.active && u.ha_user_id !== "automation" && u.board_visible !== false && (u.ha_person_entity_id || u.role === "ai_agent"))
       .sort((a, b) => String(a.display_name).localeCompare(String(b.display_name)));
   }
 
@@ -356,8 +385,10 @@ class HaushaltticketsCard extends HTMLElement {
       <div class="werkzeug">
         <div class="filter">${chips.map(([k, n, u]) => `<button class="chip ${this._filter === k ? "an" : ""}" data-f="${htEsc(k)}">${u ? this._avatar(u, 20) : ""}${htEsc(n)}</button>`).join("")}</div>
         <div class="filter typen">${typen.map(([k, n, i]) => `<button class="chip ${this._typ === k ? "an" : ""}" data-y="${htEsc(k)}" title="${htEsc(n)}">${i ? `<ha-icon icon="${i}"></ha-icon>` : ""}<span>${htEsc(n)}</span></button>`).join("")}</div>
+        ${this._kategorien.length ? `<select class="katfilter" title="${htEsc(t.kategorie)}"><option value="alle">${htEsc(t.alleKategorien)}</option>${this._kategorien.map((k) => `<option value="${k.id}" ${this._kat === String(k.id) ? "selected" : ""}>${htEsc(k.name)}</option>`).join("")}</select>` : ""}
         <input class="suche" type="search" placeholder="${htEsc(t.suche)}" value="${htEsc(this._suche)}">
         <button class="chip wdhk" title="${htEsc(t.serien)}"><ha-icon icon="mdi:calendar-sync"></ha-icon><span>${htEsc(t.serien)}</span><b></b></button>
+        ${this._rolle() === "admin" ? `<button class="chip zahnrad" title="${htEsc(t.einstellungen)}" aria-label="${htEsc(t.einstellungen)}"><ha-icon icon="mdi:cog-outline"></ha-icon></button>` : ""}
         <button class="plus" title="${htEsc(t.neu)}"><ha-icon icon="mdi:plus"></ha-icon><span>${htEsc(t.neu)}</span></button>
       </div>`;
     kopf.querySelectorAll(".chip[data-f]").forEach((b) => b.addEventListener("click", () => {
@@ -371,6 +402,10 @@ class HaushaltticketsCard extends HTMLElement {
       this._board();
     }));
     kopf.querySelector(".suche").addEventListener("input", (e) => { this._suche = e.target.value; this._board(); });
+    const kf = kopf.querySelector(".katfilter");
+    if (kf) kf.addEventListener("change", () => { this._kat = kf.value; this._board(); });
+    const zr = kopf.querySelector(".zahnrad");
+    if (zr) zr.addEventListener("click", () => this._einstellungenOeffnen());
     kopf.querySelector(".plus").addEventListener("click", () => this._oeffnen(null));
     kopf.querySelector(".wdhk").addEventListener("click", () => this._serienOeffnen());
     this._board();
@@ -382,6 +417,7 @@ class HaushaltticketsCard extends HTMLElement {
     if (f === "ich") { const ich = this._ich(); if (!i.assignee_ids.includes(ich) && i.requested_by_id !== ich) return false; }
     else if (f !== "alle" && !i.assignee_ids.includes(f)) return false;
     if (this._typ !== "alle" && i.type !== this._typ) return false;
+    if (this._kat !== "alle" && String(i.category_id) !== this._kat) return false;
     const q = this._suche.trim().toLowerCase();
     return !q || ("#" + i.id + " " + i.title + " " + (i.description || "")).toLowerCase().includes(q);
   }
@@ -440,6 +476,7 @@ class HaushaltticketsCard extends HTMLElement {
       ${i.cover_attachment_id ? `<img class="cover" data-bild="${htEsc(i.cover_attachment_id)}" alt="">` : ""}
       <div class="zeile1"><ha-icon class="typ" icon="${HT_TYPEN[i.type]}" title="${htEsc(t.typen[i.type])}"></ha-icon><span class="kt"><span class="nr">#${i.id}</span> ${htEsc(i.title)}</span><span class="avs">${avs}</span></div>
       <div class="zeile2">
+        ${this._katChip(i)}
         ${i.urgency !== "someday" && !zu ? `<span class="prio">${htEsc(t.dringlich[i.urgency])}</span>` : ""}
         ${i.status === "waiting_for_parts" ? `<span class="wartet"><ha-icon icon="mdi:package-variant-closed"></ha-icon>${htEsc(t.wartet)}</span>` : ""}
         ${freigabe}
@@ -451,6 +488,13 @@ class HaushaltticketsCard extends HTMLElement {
         ${abnahme}
       </div>
     </article>`;
+  }
+
+  _katChip(i) {
+    if (!i.category_id) return "";
+    const k = this._kategorien.find((x) => x.id === i.category_id);
+    const name = k ? k.name : i.category_name;
+    return name ? `<span class="kat" style="--kf:${htEsc((k && k.color) || "#9e9e9e")}">${htEsc(name)}</span>` : "";
   }
 
   // Vorschaubilder über die Integration laden (mit Anmeldung), einmal je Sitzung
@@ -525,10 +569,11 @@ class HaushaltticketsCard extends HTMLElement {
 
   async _oeffnen(id) {
     const neu = id == null;
+    this._einstAuf = false;
     const ueber = this._portal();
     this._dialog = { id: neu ? null : id };
     if (neu) {
-      this._dialog.w = { type: this._typ !== "alle" ? this._typ : "repair", title: "", description: "", urgency: "someday", importance: null, due_date: null, assignee_ids: [], felder: {}, dateien: [], wdh: false, regel: { ...HT_REGEL } };
+      this._dialog.w = { type: this._typ !== "alle" ? this._typ : "repair", title: "", description: "", urgency: "someday", importance: null, due_date: null, assignee_ids: [], felder: { category_id: this._kat !== "alle" ? Number(this._kat) : null }, dateien: [], wdh: false, regel: { ...HT_REGEL } };
       this._dialogZeichnen(ueber);
       return;
     }
@@ -556,7 +601,7 @@ class HaushaltticketsCard extends HTMLElement {
         type: ticket.type, title: ticket.title, description: ticket.description || "", status: ticket.status,
         urgency: ticket.urgency, importance: ticket.importance, due_date: ticket.due_date, assignee_ids: [...ticket.assignee_ids],
         ai_draft_requested: ticket.ai_draft_requested, ai_implement_approved: ticket.ai_implement_approved,
-        felder: Object.fromEntries((HT_TYPFELDER[ticket.type] || []).map((f) => [f, ticket[f]])),
+        felder: Object.fromEntries((HT_TYPFELDER[ticket.type] || []).map((f) => [f, ticket[f]]).concat([["category_id", ticket.category_id ?? null]])),
         wdh: false, regel: { ...HT_REGEL },
       };
       this._dialogZeichnen(this._portal());
@@ -618,6 +663,7 @@ class HaushaltticketsCard extends HTMLElement {
       ${neu ? `<label>${htEsc(t.typ)}</label><div class="seg ty">${Object.keys(HT_TYPEN).map((k) => `<button data-v="${k}" class="${w.type === k ? "an" : ""}"><ha-icon icon="${HT_TYPEN[k]}"></ha-icon>${htEsc(t.typen[k])}</button>`).join("")}</div>` : ""}
       ${freigabe}
       <textarea class="dtext" rows="3" placeholder="${htEsc(t.beschreibung)}">${htEsc(w.description)}</textarea>
+      ${this._kategorien.length || w.felder.category_id ? `<label>${htEsc(t.kategorie)}</label><select class="dkat"><option value="">${htEsc(t.keineKategorie)}</option>${this._kategorien.map((k) => `<option value="${k.id}" ${w.felder.category_id === k.id ? "selected" : ""}>${htEsc(k.name)}</option>`).join("")}</select>` : ""}
       ${neu ? "" : `<label>${htEsc(t.status)}</label>
       <div class="seg st">${HT_SPALTEN.map((s) => `<button data-v="${s.key}" style="--sf:${s.farbe}" class="${statusWert === s.key ? "an" : ""}"><ha-icon icon="${s.icon}"></ha-icon>${htEsc(t.spalten[s.key])}</button>`).join("")}</div>
       <label class="haken wartet ${statusWert === "in_progress" ? "" : "aus"}"><input type="checkbox" class="wt" ${w.status === "waiting_for_parts" ? "checked" : ""}>${htEsc(t.wartet)}</label>`}
@@ -691,7 +737,7 @@ class HaushaltticketsCard extends HTMLElement {
     const einzeln = (cls, feld) => seg(cls, (v, b) => { w[feld] = v; d.querySelectorAll(`.${cls} button`).forEach((x) => x.classList.toggle("an", x === b)); });
     einzeln("pr", "urgency");
     seg("ty", (v, b) => {
-      w.type = v; w.felder = {};
+      w.type = v; w.felder = { category_id: w.felder.category_id ?? null };
       d.querySelectorAll(".ty button").forEach((x) => x.classList.toggle("an", x === b));
       d.querySelector(".typfelder").innerHTML = this._typfelder(w);
     });
@@ -791,6 +837,8 @@ class HaushaltticketsCard extends HTMLElement {
       else if (el.type !== "checkbox" && v === "") v = null;
       w.felder[name] = v;
     });
+    const kat = d.querySelector(".dkat");
+    if (kat) w.felder.category_id = kat.value ? Number(kat.value) : null;
     const kd = d.querySelector(".kd"), ku = d.querySelector(".ku");
     if (kd) w.ai_draft_requested = kd.checked;
     if (ku) w.ai_implement_approved = ku.checked;
@@ -914,6 +962,7 @@ class HaushaltticketsCard extends HTMLElement {
     if (w.importance) body.importance = w.importance;
     if (w.assignee_ids.length) body.assignee_ids = w.assignee_ids;
     if (w.felder.ha_area_id) body.ha_area_id = w.felder.ha_area_id;
+    if (w.felder.category_id) body.category_id = w.felder.category_id;
     const felder = {};
     for (const k of HT_SERIENFELDER) {
       const v = w.felder[k];
@@ -928,6 +977,7 @@ class HaushaltticketsCard extends HTMLElement {
 
   _serienOeffnen() {
     this._dialog = null;
+    this._einstAuf = false;
     this._serienAuf = true;
     this._serieEdit = null;
     this._serienZeichnen();
@@ -1012,6 +1062,98 @@ class HaushaltticketsCard extends HTMLElement {
         this._regelVerdrahten(box, {});
         box.querySelectorAll(".pe button").forEach((b) => b.addEventListener("click", () => b.classList.toggle("an")));
       }
+    });
+  }
+
+  // ---------- Einstellungen (nur Admins) ----------
+  async _einstellungenOeffnen() {
+    this._dialog = null;
+    this._serienAuf = false;
+    this._einstAuf = true;
+    this._einstellungenZeichnen(true);
+    try { this._einst = await this._ws("GET", "/api/v1/settings"); } catch (e) { this._hinweis(e); }
+    this._einstellungenZeichnen(true);
+  }
+
+  _einstellungenZu() {
+    this._einstAuf = false;
+    this._zu_();
+  }
+
+  // Wer gerade tippt, verliert seine Eingabe nicht, wenn andere etwas ändern
+  _einstellungenZeichnen(immer = false) {
+    if (!this._einstAuf || !this._t) return;
+    const t = this._t, ueber = this._portal();
+    const aktiv = this._pt.shadowRoot.activeElement;
+    if (!immer && aktiv && aktiv.matches('.einst input:not([type="checkbox"]):not([type="color"])')) return;
+    const ich = this._ich(), kats = this._kategorien;
+    const grenze = this._einst ? this._einst.purchase_approval_threshold : "";
+    const nutzer = Object.values(this._users).filter((u) => u.active && u.ha_user_id !== "automation")
+      .sort((a, b) => String(a.display_name).localeCompare(String(b.display_name)));
+    const farbeNeu = HT_KAT_FARBEN[kats.length % HT_KAT_FARBEN.length];
+    ueber.innerHTML = `<div class="schleier"></div><div class="dlg einst" role="dialog">
+      <div class="dkopf"><ha-icon icon="mdi:cog-outline"></ha-icon><b class="stitel">${htEsc(t.einstellungen)}</b><button class="zu" title="${htEsc(t.schliessen)}"><ha-icon icon="mdi:close"></ha-icon></button></div>
+      <label>${htEsc(t.freigabeAb)}</label>
+      <div class="ezeile"><input class="grenze" type="number" min="0" step="0.01" inputmode="decimal" value="${htEsc(grenze)}"></div>
+      <p class="hinweis">${htEsc(t.freigabeText)}</p>
+      <label>${htEsc(t.kategorien)}</label>
+      ${kats.map((k) => `<div class="ezeile" data-k="${k.id}">
+        <input type="color" class="kfarbe" value="${htEsc(k.color)}" title="${htEsc(t.kategorie)}">
+        <input class="kname" value="${htEsc(k.name)}" maxlength="60">
+        <span class="kzahl" title="Tickets">${k.ticket_count || 0}</span>
+        <button class="chip weg kweg">${htEsc(t.loeschen)}</button></div>`).join("") || `<p class="hinweis">${htEsc(t.keineKategorien)}</p>`}
+      <div class="ezeile"><input type="color" class="kneu-farbe" value="${farbeNeu}"><input class="kneu-name" placeholder="${htEsc(t.neueKategorie)}" maxlength="60"><button class="chip kneu">${htEsc(t.hinzufuegen)}</button></div>
+      <label>${htEsc(t.mitgliederT)}</label>
+      ${nutzer.map((u) => {
+        const ohne = !u.ha_person_entity_id && u.role !== "ai_agent";
+        return `<div class="ezeile mit" data-u="${htEsc(u.ha_user_id)}">${this._avatar(u.ha_user_id, 24)}
+          <span class="mname">${htEsc(u.display_name)}${ohne ? `<span class="hinweis">${htEsc(t.ohnePerson)}</span>` : ""}</span>
+          <select class="mrolle" ${u.ha_user_id === ich ? "disabled" : ""}>${HT_ROLLEN.map((r) => `<option value="${r}" ${u.role === r ? "selected" : ""}>${htEsc(t.rollen[r])}</option>`).join("")}</select>
+          <label class="haken"><input type="checkbox" class="msicht" ${!ohne && u.board_visible !== false ? "checked" : ""} ${ohne ? "disabled" : ""}>${htEsc(t.aufBoard)}</label></div>`;
+      }).join("")}
+    </div>`;
+    const dlg = ueber.querySelector(".dlg");
+    ueber.querySelector(".schleier").addEventListener("click", () => this._einstellungenZu());
+    dlg.querySelector(".zu").addEventListener("click", () => this._einstellungenZu());
+    dlg.addEventListener("keydown", (e) => { if (e.key === "Escape") this._einstellungenZu(); });
+    const tun = async (fn, still) => {
+      if (await this._aktion(fn)) { if (!still) this._hinweis({ message: t.gespeichert }); await this._laden(); }
+      this._einstellungenZeichnen(true);
+    };
+    dlg.querySelector(".grenze").addEventListener("change", (e) => {
+      const v = Number(e.target.value);
+      if (!(v >= 0) || e.target.value === "") { this._einstellungenZeichnen(true); return; }
+      tun(async () => { this._einst = await this._ws("PATCH", "/api/v1/settings", { body: { purchase_approval_threshold: v.toFixed(2) } }); });
+    });
+    dlg.querySelectorAll(".ezeile[data-k]").forEach((el) => {
+      const base = `/api/v1/categories/${el.dataset.k}`, k = kats.find((x) => String(x.id) === el.dataset.k);
+      el.querySelector(".kfarbe").addEventListener("change", (e) => tun(() => this._ws("PATCH", base, { body: { color: e.target.value } }), true));
+      el.querySelector(".kname").addEventListener("change", (e) => {
+        const name = e.target.value.trim();
+        if (!name || name === k.name) { e.target.value = k.name; return; }
+        tun(() => this._ws("PATCH", base, { body: { name } }));
+      });
+      const weg = el.querySelector(".kweg");
+      weg.addEventListener("click", () => {
+        if (!weg.classList.contains("sicher")) {
+          weg.classList.add("sicher"); weg.textContent = t.katLoeschen.replace("%n", k.ticket_count || 0);
+          setTimeout(() => { weg.classList.remove("sicher"); weg.textContent = t.loeschen; }, 4000);
+          return;
+        }
+        tun(() => this._ws("DELETE", base));
+      });
+    });
+    const neu = () => {
+      const name = dlg.querySelector(".kneu-name").value.trim();
+      if (!name) { dlg.querySelector(".kneu-name").focus(); return; }
+      tun(() => this._ws("POST", "/api/v1/categories", { body: { name, color: dlg.querySelector(".kneu-farbe").value } }), true);
+    };
+    dlg.querySelector(".kneu").addEventListener("click", neu);
+    dlg.querySelector(".kneu-name").addEventListener("keydown", (e) => { if (e.key === "Enter") neu(); });
+    dlg.querySelectorAll(".mit").forEach((el) => {
+      const base = `/api/v1/users/${encodeURIComponent(el.dataset.u)}`;
+      el.querySelector(".mrolle").addEventListener("change", (e) => tun(() => this._ws("PATCH", base, { body: { role: e.target.value } })));
+      el.querySelector(".msicht").addEventListener("change", (e) => tun(() => this._ws("PATCH", base, { body: { board_visible: e.target.checked } }), true));
     });
   }
 
@@ -1303,7 +1445,17 @@ ha-card { padding: 14px 14px 16px; overflow: hidden; }
 .wdh span { flex:1; min-width:160px; } .wdh ha-icon { --mdc-icon-size:18px; }
 .wdhregel.aus { display:none; } .wdhregel .seg { margin-top:8px; }
 .rhy { display:flex; gap:6px; } .rhy input { width:70px; flex:none; } .rhy select { flex:1; }
-.dlg.serien .dkopf { margin-bottom:6px; } .dlg.serien .dkopf ha-icon { color: var(--primary-color); } .stitel { flex:1; font-size:18px; }
+.dlg.serien .dkopf, .dlg.einst .dkopf { margin-bottom:6px; } .dlg.serien .dkopf ha-icon, .dlg.einst .dkopf ha-icon { color: var(--primary-color); } .stitel { flex:1; font-size:18px; }
+.ezeile { display:flex; align-items:center; gap:8px; margin-top:6px; }
+.ezeile input:not([type]), .ezeile input[type="number"], .ezeile select, .dkat, .katfilter { box-sizing:border-box; font:inherit; font-size:13.5px; border:1px solid var(--tb-rand); border-radius:10px; background:var(--tb-glas); color:inherit; padding:7px 9px; color-scheme: light dark; }
+.ezeile input:not([type]), .ezeile input[type="number"] { flex:1; min-width:0; }
+.ezeile input[type="color"] { width:34px; height:32px; padding:2px; border:1px solid var(--tb-rand); border-radius:8px; background:none; flex:none; cursor:pointer; }
+.ezeile .weg { padding:5px 12px; border-radius:18px; } .kzahl { font-size:12px; color:var(--secondary-text-color); min-width:18px; text-align:right; }
+.mit .mname { flex:1; min-width:0; font-size:14px; } .mit .mname .hinweis { display:block; font-size:11.5px; }
+.mit label.haken { margin:0; font-size:12.5px; white-space:nowrap; }
+.dkat { width:100%; }
+.katfilter { border-radius:18px; padding:6px 12px; font-size:13px; max-width:180px; }
+.kat { display:inline-flex; align-items:center; border-radius:8px; padding:1px 7px; font-weight:600; color:var(--primary-text-color); background: color-mix(in srgb, var(--kf) 24%, transparent); border:1px solid color-mix(in srgb, var(--kf) 60%, transparent); }
 .serie { border:1px solid var(--tb-rand); border-radius:12px; padding:10px 11px; margin-top:8px; background:var(--tb-glas); }
 .serie.pause { opacity:.7; }
 .saktion { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; } .saktion .weg { padding:5px 12px; border-radius:18px; }
@@ -1333,7 +1485,7 @@ button, .karte { -webkit-tap-highlight-color: transparent; }
   .verlauf { max-height:none; }
 }
 @media (pointer: coarse) {
-  .suche, .dtext, .komm textarea, .datum, .feld input, .feld select, .punktneu input { font-size:16px; }
+  .suche, .dtext, .komm textarea, .datum, .feld input, .feld select, .punktneu input, .ezeile input, .ezeile select, .dkat, .katfilter { font-size:16px; }
   .chip { padding:8px 14px; font-size:14px; }
   .plus { padding:9px 16px 9px 12px; font-size:14px; }
   .seg button { min-height:40px; padding:8px 12px; font-size:14px; }

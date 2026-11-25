@@ -49,6 +49,7 @@ _TEMPLATE = (
     "description",
     "urgency",
     "importance",
+    "category_id",
     "ha_area_id",
     "ha_device_id",
 )
@@ -195,6 +196,8 @@ def _apply_template(
     session: Session, series: Series, body: SeriesCreate | SeriesPatch
 ) -> None:
     sent = body.model_fields_set
+    if "category_id" in sent:
+        services.check_category(session, body.category_id)
     for name in _TEMPLATE:
         if name in sent:
             value = getattr(body, name)
@@ -259,6 +262,7 @@ def create_series(session: Session, actor: Actor, body: SeriesCreate) -> Series:
             importance=ticket.importance,
             requested_by_id=ticket.requested_by_id,
             assignee_ids=ticket.assignee_ids,
+            category_id=ticket.category_id,
             ha_area_id=ticket.ha_area_id,
             ha_device_id=ticket.ha_device_id,
             checklist=[
@@ -425,6 +429,7 @@ def _create_round(session: Session, series: Series, due: date) -> Ticket:
         created_via=Via.RECURRENCE,
         status=Status.NEW,
         series_id=series.id,
+        category_id=series.category_id,
         ha_area_id=series.ha_area_id,
         ha_device_id=series.ha_device_id,
         ha_targets=[],

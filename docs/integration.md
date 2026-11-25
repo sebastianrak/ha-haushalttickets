@@ -54,7 +54,8 @@ Fired for every change on the server (polled every 10 seconds):
 
 ```yaml
 seq: 42
-type: status_changed        # ticket_created, comment_added, approval_requested, series_changed, ...
+type: status_changed        # ticket_created, comment_added, approval_requested, series_changed,
+                            # settings_changed (categories, roles, approval limit), ...
 ticket_id: 7
 actor_id: <HA user id or "automation">
 actor_person: person.robin
@@ -66,7 +67,8 @@ ticket:
   status: acceptance
   requested_by_person: person.alex
   assignee_persons: [person.robin]
-  # type, urgency, due_date, approval_state, series_id, requested_by_id, assignee_ids
+  # type, urgency, due_date, approval_state, series_id, category (name),
+  # requested_by_id, assignee_ids
 ```
 
 Example: notify the requester when a ticket waits for acceptance.
@@ -173,7 +175,7 @@ actions:
 
 | Action | Purpose |
 |---|---|
-| `haushalttickets.create_ticket` | type, title, description, urgency, due date, assignees (persons), area, device; `extra_fields` for type-specific fields such as `price_estimated` or `vendor`. Returns the ticket. |
+| `haushalttickets.create_ticket` | type, title, description, urgency, due date, assignees (persons), area, device, category (by name); `extra_fields` for type-specific fields such as `price_estimated` or `vendor`. Returns the ticket. |
 | `haushalttickets.set_status` | Move a ticket; returns the ticket. |
 | `haushalttickets.add_comment` | Comment on a ticket. |
 | `haushalttickets.assign` | Replace the assignees (persons linked to users). |
@@ -193,10 +195,10 @@ as well, with that entry's own admin setting.
 
 | Tool | Does |
 |---|---|
-| `haushalttickets_household` | Calling person and role, members, allowed values, approval threshold |
+| `haushalttickets_household` | Calling person and role, members, allowed values, categories, approval threshold |
 | `haushalttickets_list_tickets` | Open tickets by default; filters: status, type, mine, text, closed |
 | `haushalttickets_get_ticket` | All fields, checklist, comments, recent changes |
-| `haushalttickets_create_ticket` | New ticket requested by the calling person |
+| `haushalttickets_create_ticket` | New ticket requested by the calling person; optional category by name |
 | `haushalttickets_add_comment` | Comment, marked as written through the AI |
 | `haushalttickets_set_status` | Status up to `acceptance`, optional reason as comment |
 

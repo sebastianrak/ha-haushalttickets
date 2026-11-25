@@ -41,6 +41,9 @@ from .schemas import (
     ApprovalDecision,
     AssigneesSet,
     AttachmentOut,
+    CategoryCreate,
+    CategoryOut,
+    CategoryPatch,
     ChecklistCreate,
     ChecklistItemOut,
     ChecklistPatch,
@@ -214,11 +217,56 @@ def sync_users(session: SessionDep, actor: ActorDep, body: UserSync) -> list[Use
 def patch_user(
     session: SessionDep, actor: ActorDep, user_id: str, body: UserPatch
 ) -> UserOut:
-    """Change the role of a user (admins)."""
+    """Change the role or board visibility of a user (admins)."""
     user = services.get_user(session, user_id)
-    services.set_role(session, actor, user, body.role)
+    services.update_user(session, actor, user, body)
     session.commit()
     return UserOut.model_validate(user)
+
+
+# Categories
+
+
+def _category_out(category, ticket_count: int = 0) -> CategoryOut:
+    out = CategoryOut.model_validate(category)
+    out.ticket_count = ticket_count
+    return out
+
+
+@router.get("/categories")
+def list_categories(session: SessionDep, actor: ActorDep) -> list[CategoryOut]:
+    """All categories by name, with the number of tickets in each."""
+    return [_category_out(c, n) for c, n in services.list_categories(session)]
+
+
+@router.post("/categories", status_code=status.HTTP_201_CREATED)
+def create_category(
+    session: SessionDep, actor: ActorDep, body: CategoryCreate
+) -> CategoryOut:
+    """New category (admins)."""
+    category = services.create_category(session, actor, body)
+    session.commit()
+    return _category_out(category)
+
+
+@router.patch("/categories/{category_id}")
+def patch_category(
+    session: SessionDep, actor: ActorDep, category_id: int, body: CategoryPatch
+) -> CategoryOut:
+    """Rename or recolor a category (admins)."""
+    category = services.get_category(session, category_id)
+    services.update_category(session, actor, category, body)
+    session.commit()
+    counts = dict((c.id, n) for c, n in services.list_categories(session))
+    return _category_out(category, counts.get(category.id, 0))
+
+
+@router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_category(session: SessionDep, actor: ActorDep, category_id: int) -> None:
+    """Remove a category (admins); its tickets lose it."""
+    category = services.get_category(session, category_id)
+    services.delete_category(session, actor, category)
+    session.commit()
 
 
 # Settings
