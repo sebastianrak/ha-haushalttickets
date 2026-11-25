@@ -70,20 +70,17 @@ claude.ai ──Nabu Casa──▶ Home Assistant ── mcp_server (/api/mcp/ha
 
 ## Installation
 
-1. **Server:** create the Debian LXC on Proxmox and install the server –
-   [deploy/README.md](deploy/README.md).
-2. **Integration:** add this repository to HACS as a custom repository (or copy
-   `custom_components/haushalttickets`), restart Home Assistant and add the
-   integration with the server's URL and API token –
-   [docs/integration.md](docs/integration.md#setup).
-3. **Card:** add `custom:haushalttickets-card` to a dashboard, ideally a panel view –
-   [docs/card.md](docs/card.md).
-4. **Notifications:** write the delivery automation –
-   [example](docs/integration.md#delivery-example).
-5. **Optional:** connect an AI assistant over MCP
-   ([docs/integration.md](docs/integration.md#ai-assistants-mcp)), set up the nightly
-   run ([deploy/agent/README.md](deploy/agent/README.md)) and the emergency UI
-   ([deploy/README.md](deploy/README.md#emergency-ui)).
+You need Home Assistant 2026.11 or newer and a small Debian 13 system for the ticket
+server – a Proxmox container made by one script, or any Debian machine or VM.
+
+1. **Server:** install it with the script and keep the API token it prints.
+2. **Integration:** *Settings → Marketplace → Add from link* with this repository's URL,
+   then add *Haushalttickets* under *Devices & services*.
+3. **Roles:** give adults the role *adult*.
+4. **Card:** `type: custom:haushalttickets-card` on a panel view.
+5. **Notifications:** one automation delivers them to the phones.
+
+Step by step: **[docs/installation.md](docs/installation.md)**.
 
 ## Key rules
 
@@ -98,6 +95,10 @@ claude.ai ──Nabu Casa──▶ Home Assistant ── mcp_server (/api/mcp/ha
 
 | Topic | Document |
 |---|---|
+| Installation, step by step | [docs/installation.md](docs/installation.md) |
+| Using the board (for everyone in the household) | [docs/user-guide.md](docs/user-guide.md) |
+| Updates, backups, troubleshooting, uninstalling | [docs/operations.md](docs/operations.md) |
+| Questions and answers | [docs/faq.md](docs/faq.md) |
 | Architecture, roles, decisions, trade-offs | [docs/architecture.md](docs/architecture.md) |
 | Data model | [docs/data-model.md](docs/data-model.md) |
 | Integration: setup, entities, events, notifications, actions, MCP | [docs/integration.md](docs/integration.md) |
