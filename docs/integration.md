@@ -6,7 +6,7 @@ only says who is acting.
 
 ## Setup
 
-1. Install the integration (HACS custom repository or copy the folder) and restart.
+1. Install the integration (*Settings → Marketplace → Add from link*, or copy the folder) and restart.
 2. *Settings → Devices & services → Add integration → Haushalttickets*.
 3. Enter the server URL (for example `http://192.168.1.20:8080`) and the API token
    the installer printed. The server must list the Home Assistant address in
