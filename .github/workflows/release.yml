@@ -1,33 +1,65 @@
 name: Release
 
-# Push a tag like v0.1.0, or create the release in the GitHub UI. The tag must match
-# the server version. A release that already exists gets the assets attached.
+# A release is published by merging: once CI has passed on main, this workflow
+# releases the version in the code if it has no tag yet. Title and notes come from
+# release-notes/v<version>.md (CI insists the file exists before the merge).
+# Pushing a tag by hand still works; a release that already exists gets the assets.
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   push:
     tags: ["v*"]
+  workflow_dispatch: # retry for main, e.g. after a failed publish
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
+    # Only after a successful CI run for a push to main, not for pull requests.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+      - name: Decide
+        id: decide
+        run: |
+          version=$(.github/scripts/release-info.sh version)
+          tag="v$version"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test "$tag" = "$GITHUB_REF_NAME" || { echo "::error::Tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Run this workflow on main only"; exit 1
+          else
+            status=0
+            .github/scripts/release-info.sh released || status=$?
+            if [ "$status" -eq 0 ]; then
+              echo "$tag is already released, nothing to do."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            [ "$status" -eq 3 ] || exit 1   # could not ask origin
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@v7
+        if: steps.decide.outputs.publish == 'true'
         with:
           python-version: "3.13"
-      - name: Check version
-        run: |
-          version=$(grep -Po '__version__ = "\K[^"]+' server/src/haushalttickets_server/__init__.py)
-          test "v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME does not match server version $version"; exit 1; }
-          agent=$(grep -Po '__version__ = "\K[^"]+' agent/src/haushalttickets_agent/__init__.py)
-          test "$agent" = "$version" || { echo "Agent version $agent differs"; exit 1; }
-          if [ -f custom_components/haushalttickets/manifest.json ]; then
-            manifest=$(python3 -c 'import json; print(json.load(open("custom_components/haushalttickets/manifest.json"))["version"])')
-            test "$manifest" = "$version" || { echo "Integration version $manifest differs"; exit 1; }
-          fi
       - name: Build
+        if: steps.decide.outputs.publish == 'true'
         working-directory: server
         run: |
           uv build --wheel --out-dir ../dist
@@ -38,6 +70,7 @@ jobs:
           cd ../dist && sha256sum -- haushalttickets_server-*.whl requirements.txt haushalttickets-update \
             haushalttickets-backup haushalttickets-ctl > SHA256SUMS
       - name: Build nightly run (agent)
+        if: steps.decide.outputs.publish == 'true'
         working-directory: agent
         run: |
           uv build --wheel --out-dir ../dist
@@ -50,11 +83,25 @@ jobs:
             ha-mcp-requirements.txt managed-settings.json haushalttickets-nightly.service \
             haushalttickets-nightly.timer haushalttickets-agent-ctl haushalttickets-agent-update > AGENT-SHA256SUMS
       - name: Publish
+        if: steps.decide.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.decide.outputs.tag }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+            exit 0
+          fi
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            where=(--verify-tag)       # the pushed tag
           else
-            gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag
+            where=(--target "$SHA")    # creates the tag at the commit CI tested
+          fi
+          if [ -f "release-notes/$TAG.md" ]; then
+            .github/scripts/release-info.sh body > "$RUNNER_TEMP/notes.md"
+            gh release create "$TAG" dist/* "${where[@]}" \
+              --title "$(.github/scripts/release-info.sh title)" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            # Only reachable with a hand-pushed tag; CI requires the notes before a merge.
+            gh release create "$TAG" dist/* "${where[@]}" --generate-notes
           fi

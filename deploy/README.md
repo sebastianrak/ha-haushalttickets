@@ -119,10 +119,22 @@ run and how many tickets wait.
 
 ## Publishing a release
 
-Push a tag (`git tag v0.4.0 && git push origin v0.4.0`) or create the release in the
-GitHub UI. The tag must match the server and integration version. The *Release*
-workflow builds the wheel and attaches it with `requirements.txt` and `SHA256SUMS`;
-`haushalttickets-update` refuses a release without these assets.
+A release is published by merging a pull request that raises the version:
+
+1. Set the same version in `server/src/haushalttickets_server/__init__.py`,
+   `agent/src/haushalttickets_agent/__init__.py` and
+   `custom_components/haushalttickets/manifest.json`.
+2. Add `release-notes/v<version>.md`. Its first line is `# <release title>`, the rest
+   is the release notes in Markdown. CI fails while the file is missing.
+3. Merge. Once CI has passed on `main`, the *Release* workflow creates the tag and the
+   release with the wheels, `requirements.txt`, the container tools, `SHA256SUMS` and
+   `AGENT-SHA256SUMS`. `haushalttickets-update` and `haushalttickets-agent-update`
+   refuse a release without these assets.
+
+A merge that keeps the version releases nothing. If publishing fails, run the
+*Release* workflow on `main` by hand (Actions → Release → Run workflow). A tag pushed
+by hand, or a release created in the GitHub UI, still works: the workflow attaches the
+assets to it.
 
 ## Restore a dump
 
